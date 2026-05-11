@@ -2,8 +2,9 @@
 
 
 
-
-
+import math
+from pyrogram.enums import ParseMode, ChatMemberStatus
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 import asyncio
 import random
 import string
@@ -45,6 +46,9 @@ users_db = db["all_users"]
 links_db = db["short_links"] 
 sudo_db = db["sudo_users"] 
 daily_access_db = db["daily_access_tracker"]
+WAITING_FOR_LIMIT = {}  # Daily access limit input track karne ke liye
+PENDING_SOURCES = {}    # Auto channel connect status track karne ke liye
+
 # 🆕 Daily limit track karne ke liye
 
 
@@ -70,7 +74,9 @@ async def is_sudo(user_id):
 # ==========================================
 # 1️⃣ USER COMMANDS & DM BOT LOGIC
 # ==========================================
-
+# ==========================================
+# 1️⃣ USER COMMANDS & DM BOT LOGIC (/start)
+# ==========================================
 @app.on_message(filters.command("start") & filters.private)
 async def start_handler(client, message):
     global BOT_USERNAME
@@ -84,7 +90,7 @@ async def start_handler(client, message):
     
     await users_db.update_one({"user_id": viewer_id}, {"$set": {"name": viewer_name}}, upsert=True)
     
-    # 📌 VIDEO FETCH LOGIC (Remains exactly the same!)
+    # 📌 VIDEO FETCH LOGIC (Same as your original code)
     if len(text.split()) > 1:
         short_code = text.split()[1]
         try:
@@ -96,7 +102,7 @@ async def start_handler(client, message):
             p_chat_id = link_data["chat_id"]
             msg_id = link_data["msg_id"]
 
-            # --- 🛑 ADVANCED DAILY LIMIT CHECKER START ---
+            # --- 🛑 DAILY LIMIT CHECKER ---
             connection = await connections_db.find_one({"private_channel_id": p_chat_id})
             if connection:
                 owner_id = connection["user_id"]
@@ -139,7 +145,6 @@ async def start_handler(client, message):
                     {"$inc": {"view_count": 1}, "$set": {"viewer_name": viewer_name}},
                     upsert=True
                 )
-            # --- 🛑 ADVANCED DAILY LIMIT CHECKER END ---
             
             await client.copy_message(
                 chat_id=message.chat.id, 
@@ -162,16 +167,17 @@ async def start_handler(client, message):
         welcome_text = (
             "🚀 <b>Welcome to the Ultimate Auto File Store Bot!</b>\n\n"
             "⚙️ <b><u>Main Menu:</u></b>\n"
-            "Please select an option below to manage your bot and channels.\n\n"
+            "Select an option below to easily connect and manage your channels.\n\n"
             "⚠️ <i><b>Note:</b> An active Sudo Subscription is required to manage channels.</i>"
         )
         
-        # New Interactive Buttons
+        # 🆕 Updated Buttons for Auto-Connect
         buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Connect", callback_data="cmd_connect"),
-             InlineKeyboardButton("📊 Video Access", callback_data="cmd_videoaccess")],
-            [InlineKeyboardButton("⏳ Daily Access", callback_data="cmd_dailyaccess"),
-             InlineKeyboardButton("⚙️ Channel Access", callback_data="cmd_channelaccess")]
+            [InlineKeyboardButton("⚡ Auto Add Source +", url=f"https://t.me/{BOT_USERNAME}?startchannel=admin&admin=post_messages+edit_messages+delete_messages"),
+             InlineKeyboardButton("⚡ Auto Add Target +", url=f"https://t.me/{BOT_USERNAME}?startchannel=admin&admin=post_messages+edit_messages+delete_messages")],
+            [InlineKeyboardButton("🔗 Connected Channels", callback_data="cmd_connected")],
+            [InlineKeyboardButton("📊 Video Access", callback_data="cmd_videoaccess_1"),
+             InlineKeyboardButton("⏳ Daily Access", callback_data="cmd_dailyaccess")]
         ])
         
         await message.reply_text(welcome_text, reply_markup=buttons, parse_mode=ParseMode.HTML, protect_content=True)
@@ -185,88 +191,194 @@ async def handle_main_menu_callbacks(client, callback_query):
     data = callback_query.data
     user_id = callback_query.from_user.id
 
-    # Sudo check before allowing them to use the buttons
     if not await is_sudo(user_id):
         return await callback_query.answer("❌ Access Denied! An active Sudo Subscription is required.", show_alert=True)
 
-    if data == "cmd_videoaccess":
-        # Fetches the same stats as the /videoaccess command
-        stats = await viewer_stats_db.find({"owner_id": user_id}).sort("view_count", -1).to_list(length=100)
+    # 📊 Video Access Logic (With Pagination)
+    if data.startswith("cmd_videoaccess"):
+        page = int(data.split("_")[2]) if len(data.split("_")) > 2 else 1
+        limit_per_page = 15 # Ek page me kitne dikhane hain
+        
+        stats = await viewer_stats_db.find({"owner_id": user_id}).sort("view_count", -1).to_list(length=None)
         
         if not stats:
             return await callback_query.answer("📉 No views recorded yet.", show_alert=True)
             
-        channel_data = {}
-        for stat in stats:
-            c_name = stat.get("channel_name", "Unknown Channel")
-            if c_name not in channel_data:
-                channel_data[c_name] = []
-            channel_data[c_name].append(stat)
+        total_pages = math.ceil(len(stats) / limit_per_page)
+        start_idx = (page - 1) * limit_per_page
+        end_idx = start_idx + limit_per_page
+        current_stats = stats[start_idx:end_idx]
+        
+        text = f"👥 <b><u>Top Viewers (Page {page}/{total_pages}):</u></b>\n\n"
+        for idx, v in enumerate(current_stats, start=start_idx + 1):
+            c_name = v.get("channel_name", "Unknown")
+            v_name = v.get("viewer_name", "Unknown")
+            v_count = v.get("view_count", 0)
+            text += f"<b>{idx}.</b> {v_name} - <b>{v_count} Views</b> (<i>{c_name}</i>)\n"
             
-        text = "👥 <b><u>Channel-Wise Top Viewer Data:</u></b>\n\n"
-        c_idx = 1
-        for c_name, viewers in channel_data.items():
-            text += f"<b>{c_idx}. 📢 Channel:</b> <code>{c_name}</code>\n"
-            v_idx = 1
-            for v in viewers:
-                v_name = v.get("viewer_name", "Unknown")
-                v_count = v.get("view_count", 0)
-                text += f"   ├ <b>{v_idx}.</b> {v_name} - <b>{v_count} Videos</b>\n"
-                v_idx += 1
+        # Pagination Buttons Generate karna
+        nav_buttons = []
+        if page > 1:
+            nav_buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"cmd_videoaccess_{page-1}"))
+        if page < total_pages:
+            nav_buttons.append(InlineKeyboardButton("Next ➡️", callback_data=f"cmd_videoaccess_{page+1}"))
+            
+        keyboard = InlineKeyboardMarkup([nav_buttons]) if nav_buttons else None
+        
+        try:
+            await callback_query.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
+        await callback_query.answer()
+
+    # 🔗 Connected Channels Button Logic
+    elif data == "cmd_connected":
+        connections = await connections_db.find({"user_id": user_id}).to_list(length=None)
+        if not connections:
+            return await callback_query.answer("❌ No channels connected yet.", show_alert=True)
+
+        text = "🔗 <b><u>Your Connected Channels:</u></b>\n\n"
+        for c in connections:
+            s_name = c.get("channel_name", "Unknown Name")
+            s_id = c.get("private_channel_id", "Unknown")
+            t_id = c.get("public_channel_id", "Unknown Target")
+            
+            text += f"📁 <b>{s_name}</b>\n"
+            text += f"   ├ <b>Source ID:</b> <code>{s_id}</code>\n"
+            text += f"   └ <b>Target ID:</b> <code>{t_id}</code>\n"
             text += "━━━━━━━━━━━━━━━━━━━━\n"
-            c_idx += 1
-            
-        text += f"\n💡 <i>Total Unique Viewers (Top 100): {len(stats)}</i>"
-        
+
         if len(text) > 4000:
-            text = text[:4000] + "...\n\n⚠️ <i>Message is too long, showing top results only.</i>"
+            text = text[:4000] + "...\n<i>Message too long.</i>"
             
-        await callback_query.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await callback_query.message.edit_text(text, parse_mode=ParseMode.HTML)
         await callback_query.answer()
 
+    # ⏳ Daily Access Input Button
     elif data == "cmd_dailyaccess":
-        await callback_query.answer()
+        WAITING_FOR_LIMIT[user_id] = True # Status ON kar diya user ke liye
         await callback_query.message.reply_text(
-            "📝 <b><u>Set Global Daily Access</u></b>\n\n"
-            "To set a default limit for all your channels, send the command like this:\n\n"
-            "👉 <code>/dailyaccess 5</code> (Allows 5 videos/day)\n"
-            "👉 <code>/dailyaccess 0</code> (Sets it to Unlimited)", 
+            "📝 <b><u>Set Global Daily Access Limit</u></b>\n\n"
+            "Please send the number of videos a user can watch per day (e.g., <code>5</code>).\n\n"
+            "<i>(Type <code>0</code> for Unlimited Access)</i>",
+            reply_markup=ForceReply(selective=True),
             parse_mode=ParseMode.HTML
         )
-
-    elif data == "cmd_channelaccess":
         await callback_query.answer()
-        await callback_query.message.reply_text(
-            "📝 <b><u>Set Channel-Specific Limit</u></b>\n\n"
-            "To set a limit for one specific channel, send the command like this:\n\n"
-            "👉 <code>/channelaccess -100ChannelID 10</code>\n\n"
-            "To remove the custom limit and use the global default, send:\n"
-            "👉 <code>/channelaccess -100ChannelID default</code>", 
-            parse_mode=ParseMode.HTML
-        )
 
-    elif data == "cmd_connect":
-        global BOT_USERNAME
-        if BOT_USERNAME is None:
-            bot_info = await app.get_me()
-            BOT_USERNAME = bot_info.username
 
-        text = (
-            "🔗 <b><u>Connect Your Channels</u></b>\n\n"
-            "<b>Step 1:</b> Click the buttons below to add me directly as an Admin to your Private and Public channels.\n"
-            "<b>Step 2:</b> Once I'm added, simply send your command to link them together:\n\n"
-            "👉 <code>/connect -100PrivateID -100PublicID</code>\n\n"
-            "<i>(💡 <b>Tip:</b> If you need to find the -100 ID, you can forward a message from your channel to @userinfobot)</i>"
+# ==========================================
+# ⌨️ DYNAMIC TEXT HANDLER (Daily Access Number)
+# ==========================================
+@app.on_message(filters.private & filters.text)
+async def handle_dynamic_inputs(client, message):
+    user_id = message.from_user.id
+    
+    # Agar user Daily Access set karne wala tha...
+    if WAITING_FOR_LIMIT.get(user_id):
+        try:
+            limit = int(message.text.strip())
+            if limit < 0: raise ValueError
+        except ValueError:
+            return await message.reply_text("❌ <b>Please send a valid positive number.</b>", parse_mode=ParseMode.HTML)
+
+        await sudo_db.update_one(
+            {"user_id": user_id},
+            {"$set": {"global_daily_limit": limit}},
+            upsert=True
         )
-        
-        # Generates the direct "Add to Channel" buttons
-        buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Add Private Channel", url=f"https://t.me/{BOT_USERNAME}?startchannel=admin")],
-            [InlineKeyboardButton("➕ Add Public Channel", url=f"https://t.me/{BOT_USERNAME}?startchannel=admin")]
-        ])
-        
-        await callback_query.message.edit_text(text, reply_markup=buttons, parse_mode=ParseMode.HTML)
-        await callback_query.answer()
+        WAITING_FOR_LIMIT.pop(user_id, None) # Status OFF kar diya
+
+        msg = f"✅ <b>Global Daily Limit Set!</b>\nUsers can now watch <b>{limit} videos per day</b> from your channels." if limit > 0 else "✅ <b>Global Limit Removed! (Unlimited)</b>"
+        await message.reply_text(msg, parse_mode=ParseMode.HTML)
+
+
+# ==========================================
+# 🤖 AUTO DETECT & CONNECT MAGIC WAND
+# ==========================================
+@app.on_chat_member_updated(filters.channel)
+async def on_bot_added_to_channel(client, update):
+    bot_id = (await app.get_me()).id
+    
+    # Check karein agar bot ko kisi channel me Add ya Promote kiya gaya hai
+    if update.new_chat_member and update.new_chat_member.user.id == bot_id:
+        if update.new_chat_member.status in [ChatMemberStatus.ADMINISTRATOR]:
+            user_id = update.from_user.id
+            if not await is_sudo(user_id):
+                return
+
+            chat_id = update.chat.id
+            chat_title = update.chat.title
+
+            pending_source = PENDING_SOURCES.get(user_id)
+
+            if not pending_source:
+                # 1️⃣ PEHLI BAAR ADD KIYA (Auto Source Detection)
+                try:
+                    # Auto Create Topic in Master Group
+                    peer = await app.resolve_peer(SPECIAL_GROUP_ID)
+                    channel_input = InputChannel(channel_id=peer.channel_id, access_hash=peer.access_hash)
+                    raw_result = await app.invoke(
+                        CreateForumTopic(channel=channel_input, title=chat_title[:128], random_id=random.randint(100000, 999999999))
+                    )
+                    
+                    topic_id = None
+                    if hasattr(raw_result, 'updates'):
+                        for upd in raw_result.updates:
+                            if hasattr(upd, 'message') and hasattr(upd.message, 'id'):
+                                topic_id = upd.message.id; break
+                            elif hasattr(upd, 'id'):
+                                topic_id = upd.id; break
+
+                    # Pending Source memory me save kar lo
+                    PENDING_SOURCES[user_id] = {
+                        "chat_id": chat_id,
+                        "chat_title": chat_title,
+                        "topic_id": topic_id
+                    }
+
+                    await app.send_message(
+                        user_id,
+                        f"✅ <b>SOURCE DETECTED!</b>\n\n"
+                        f"📁 <b>Channel:</b> {chat_title}\n"
+                        f"🗂️ <b>Logging Topic Created.</b>\n\n"
+                        f"⚡ <b>Next Step:</b> Ab <b>Auto Add Target +</b> button dabayein aur public channel connect karein.",
+                        parse_mode=ParseMode.HTML
+                    )
+                except Exception as e:
+                    print(f"Auto Topic Error: {e}")
+                    await app.send_message(user_id, f"⚠️ Source Detected, lekin Auto-Topic create nahi hua. (Error: {e})")
+
+            else:
+                # 2️⃣ DUSRI BAAR ADD KIYA (Auto Target & Connect!)
+                source_id = pending_source["chat_id"]
+                source_title = pending_source["chat_title"]
+                topic_id = pending_source["topic_id"]
+
+                # Dono channels ko automatically Database me connect kar do
+                await connections_db.update_one(
+                    {"private_channel_id": source_id},
+                    {"$set": {
+                        "user_id": user_id,
+                        "public_channel_id": chat_id,
+                        "channel_name": source_title,
+                        "topic_id": topic_id
+                    }},
+                    upsert=True
+                )
+
+                # Pending list se hata do
+                PENDING_SOURCES.pop(user_id, None)
+
+                await app.send_message(
+                    user_id,
+                    f"🎯 <b>TARGET DETECTED & AUTOMATICALLY CONNECTED!</b>\n\n"
+                    f"✅ <b>Source:</b> {source_title}\n"
+                    f"✅ <b>Target:</b> {chat_title}\n\n"
+                    f"🎉 <i>Bina ID copy-paste kiye, aapke dono channels successfully connect ho gaye hain!</i>",
+                    parse_mode=ParseMode.HTML
+                )
+
 
 
 # ==========================================
