@@ -1,10 +1,4 @@
 
-
-
-
-
-
-
 import math
 from pyrogram.enums import ParseMode, ChatMemberStatus
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
@@ -168,7 +162,7 @@ async def start_handler(client, message):
     else:
         # 🎨 NEW PREMIUM MAIN MENU UI
         welcome_text = (
-            "🚀 <b>Welcome to the Ultimate Auto File Store Bot!</b>\n\n"
+            "🚀 <b>Welcome to the SRC Bot</b>\n\n"
             "⚙️ <b><u>Main Menu:</u></b>\n"
             "Select an option below to easily connect and manage your channels.\n\n"
             "⚠️ <i><b>Note:</b> An active Sudo Subscription is required to manage channels.</i>"
@@ -176,8 +170,8 @@ async def start_handler(client, message):
         
         # 🆕 Updated Buttons for Auto-Connect
         buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⚡ Auto Add Source +", url=f"https://t.me/{BOT_USERNAME}?startchannel=admin&admin=post_messages+edit_messages+delete_messages"),
-             InlineKeyboardButton("⚡ Auto Add Target +", url=f"https://t.me/{BOT_USERNAME}?startchannel=admin&admin=post_messages+edit_messages+delete_messages")],
+            [InlineKeyboardButton("Auto Add Source +", url=f"https://t.me/{BOT_USERNAME}?startchannel=admin&admin=post_messages+edit_messages+delete_messages"),
+             InlineKeyboardButton("Auto Add Target +", url=f"https://t.me/{BOT_USERNAME}?startchannel=admin&admin=post_messages+edit_messages+delete_messages")],
             [InlineKeyboardButton("🔗 Connected Channels", callback_data="cmd_connected")],
             [InlineKeyboardButton("📊 Video Access", callback_data="cmd_videoaccess_1"),
              InlineKeyboardButton("⏳ Daily Access", callback_data="cmd_dailyaccess")]
@@ -350,7 +344,7 @@ async def on_bot_added_to_channel(client, update):
                     )
                 except Exception as e:
                     print(f"Auto Topic Error: {e}")
-                    await app.send_message(user_id, f"⚠️ Source Detected, lekin Auto-Topic create nahi hua. (Error: {e})")
+                    await app.send_message(user_id, f"⚠️ Source Detected, lekin Auto- connect nahi ho raha hai /connect es commd ka use kar ke connect kare ")
 
             else:
                 # 2️⃣ DUSRI BAAR ADD KIYA (Auto Target & Connect!)
