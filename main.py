@@ -19,7 +19,7 @@ from pyrogram.errors import FloodWait, PeerIdInvalid
 # ==========================================
 API_ID = 20137104
 API_HASH = "1209338eedc55ab701dd2e9d353c05ad"
-BOT_TOKEN = "8437872953:AAGxC8Mx7flsts_ISg_jGg2OWMiUqrYIcq8"
+BOT_TOKEN = "8797515244:AAEP7za-JSFuqLuSV1IHtE1lXFn2nmwVLeY"
 MONGO_URI = "mongodb+srv://tigerbundle282:tTaRXh353IOL9mj2@testcookies.2elxf.mongodb.net/?retryWrites=true&w=majority&appName=Testcookies"
 SPECIAL_GROUP_ID = -1003667939361
 ADMIN_ID = 5050578106  
