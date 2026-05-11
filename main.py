@@ -759,6 +759,39 @@ async def video_access_stats(client, message):
 
 
 # ==========================================
+# 🔌 DISCONNECT CHANNEL COMMAND
+# ==========================================
+@app.on_message(filters.command("disconnect") & filters.private)
+async def disconnect_channels(client, message):
+    user_id = message.from_user.id
+    
+    if not await is_sudo(user_id):
+        return await message.reply_text("❌ <b>Access Denied!</b>", parse_mode=ParseMode.HTML)
+    
+    args = message.text.split()
+    if len(args) < 2:
+        return await message.reply_text(
+            "❌ <b>Format:</b> <code>/disconnect -100PrivateChannelID</code>\n\n"
+            "💡 <i>Apne channels ki ID dekhne ke liye 'Connected Channels' button dabayein.</i>", 
+            parse_mode=ParseMode.HTML
+        )
+    
+    try:
+        channel_id = int(args[1])
+        # Database se connection delete karna
+        result = await connections_db.delete_one({"private_channel_id": channel_id, "user_id": user_id})
+        
+        if result.deleted_count > 0:
+            await message.reply_text("✅ <b>Channel Successfully Disconnected!</b>\nAb is channel se videos forward/process nahi hongi.", parse_mode=ParseMode.HTML)
+        else:
+            await message.reply_text("❌ <b>Channel nahi mila ya aap iske owner nahi hain.</b>", parse_mode=ParseMode.HTML)
+            
+    except ValueError:
+        await message.reply_text("❌ <b>Invalid Channel ID.</b> Kripya sahi ID daalein (jaise: -100123456789).", parse_mode=ParseMode.HTML)
+
+
+
+# ==========================================
 # 📢 BROADCAST TO PRIVATE CHANNELS COMMAND
 # ==========================================
 @app.on_message(filters.command("broadcast") & filters.private)
