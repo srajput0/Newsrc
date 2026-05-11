@@ -6,14 +6,13 @@ import psutil
 import subprocess
 import sys
 from datetime import datetime, timedelta
-from pyrogram import Client, filters
+from pyrogram import Client, idle, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus
 from pyrogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     ChatMemberUpdated
 )
-from pyrogram.raw.functions.channels import CreateForumTopic
-from pyrogram.raw.types import InputChannel
+# ForumTopic raw imports removed as we use built-in method now
 from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram.errors import FloodWait, PeerIdInvalid
 
@@ -119,7 +118,7 @@ async def get_main_keyboard(user_id: int) -> InlineKeyboardMarkup:
 async def start_handler(client, message):
     global BOT_USERNAME
     if BOT_USERNAME is None:
-        bot_info = await app.get_me()
+        bot_info = await client.get_me()
         BOT_USERNAME = bot_info.username
 
     text    = message.text
@@ -230,7 +229,7 @@ async def cb_menu_connect(client, cq):
 
     global BOT_USERNAME
     if BOT_USERNAME is None:
-        bot_info = await app.get_me()
+        bot_info = await client.get_me()
         BOT_USERNAME = bot_info.username
 
     add_url = f"https://t.me/{BOT_USERNAME}?startchannel=admin"
@@ -274,9 +273,6 @@ async def on_bot_promoted(client, update: ChatMemberUpdated):
     chat_id = chat.id
     title   = chat.title or f"Channel {chat_id}"
 
-    # Find who recently triggered the connect flow
-    # We store pending state per user so we know source vs target
-    # Determine the promoter's user_id from the inviter or fallback
     promoter_id = None
     if update.from_user:
         promoter_id = update.from_user.id
@@ -284,11 +280,9 @@ async def on_bot_promoted(client, update: ChatMemberUpdated):
     if promoter_id is None:
         return
 
-    # Load or create pending state for this user
     pending = await pending_connect_db.find_one({"user_id": promoter_id}) or {}
 
     if "source_id" not in pending:
-        # First channel added = source
         await pending_connect_db.update_one(
             {"user_id": promoter_id},
             {"$set": {"source_id": chat_id, "source_name": title}},
@@ -303,7 +297,6 @@ async def on_bot_promoted(client, update: ChatMemberUpdated):
         except Exception:
             pass
     elif "target_id" not in pending:
-        # Second channel = target
         await pending_connect_db.update_one(
             {"user_id": promoter_id},
             {"$set": {"target_id": chat_id, "target_name": title}},
@@ -338,12 +331,6 @@ async def cb_connect_link(client, cq):
     target_id   = pending["target_id"]
     source_name = pending.get("source_name", f"Channel {source_id}")
 
-    try:
-        await app.get_chat(source_id)
-        await app.get_chat(target_id)
-    except Exception:
-        return await cq.answer("❌ Bot can't access one of the channels. Make sure it's admin in both.", show_alert=True)
-
     await connections_db.update_one(
         {"private_channel_id": source_id},
         {"$set": {
@@ -354,7 +341,6 @@ async def cb_connect_link(client, cq):
         upsert=True
     )
 
-    # Clear pending state
     await pending_connect_db.delete_one({"user_id": user_id})
 
     kb = await get_main_keyboard(user_id)
@@ -365,7 +351,6 @@ async def cb_connect_link(client, cq):
         reply_markup=kb, parse_mode=ParseMode.HTML
     )
     await cq.answer("✅ Done!")
-
 
 # ==========================================
 # 👁 VIEW CONNECTIONS
@@ -511,7 +496,6 @@ async def cb_video_access_page(client, cq):
 
     text = f"👥 <b>Video Access Stats</b> (Page {page+1}/{(total-1)//PAGE_SIZE+1})\n━━━━━━━━━━━━━━━━━━━━\n\n"
 
-    # Group by channel on this page
     for i, s in enumerate(slice_, start=start+1):
         v_name  = s.get("viewer_name", "Unknown")
         v_count = s.get("view_count", 0)
@@ -523,7 +507,6 @@ async def cb_video_access_page(client, cq):
     if len(text) > 4000:
         text = text[:4000] + "..."
 
-    # Build pagination buttons
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"va_page_{page-1}"))
@@ -544,14 +527,12 @@ async def cb_video_access_page(client, cq):
     await cq.answer()
 
 
-# ── /videoaccess command (still works) ────────────────────────────────────────
 @app.on_message(filters.command("videoaccess") & filters.private)
 async def video_access_stats(client, message):
     owner_id = message.from_user.id
     if not await is_sudo(owner_id):
         return await message.reply_text("❌ <b>Access Denied!</b>", parse_mode=ParseMode.HTML)
 
-    # Trigger page 0 via a helper
     all_stats = await viewer_stats_db.find({"owner_id": owner_id}).sort("view_count", -1).to_list(length=None)
     if not all_stats:
         return await message.reply_text("📉 <b>No views recorded yet.</b>", parse_mode=ParseMode.HTML)
@@ -644,7 +625,7 @@ async def handle_video_callback(client, cq):
     short_code = cq.data.replace("vid_", "")
     global BOT_USERNAME
     if BOT_USERNAME is None:
-        bot_info = await app.get_me()
+        bot_info = await client.get_me()
         BOT_USERNAME = bot_info.username
     await cq.answer(url=f"https://t.me/{BOT_USERNAME}?start={short_code}")
 
@@ -759,13 +740,13 @@ async def delete_all_channel_msgs(client, message):
 
     status_msg = await message.reply_text("⏳ Scanning channel...", parse_mode=ParseMode.HTML)
     try:
-        dummy_msg      = await app.send_message(channel_id, "<i>Cleaning in progress...</i>", parse_mode=ParseMode.HTML)
+        dummy_msg      = await client.send_message(channel_id, "<i>Cleaning in progress...</i>", parse_mode=ParseMode.HTML)
         latest_msg_id  = dummy_msg.id
         await status_msg.edit_text(f"⏳ Deleting {latest_msg_id} messages...", parse_mode=ParseMode.HTML)
         for i in range(latest_msg_id, 0, -100):
             ids = list(range(i, max(0, i - 100), -1))
             try:
-                await app.delete_messages(channel_id, ids)
+                await client.delete_messages(channel_id, ids)
                 await asyncio.sleep(2.5)
             except FloodWait as e:
                 await asyncio.sleep(e.value)
@@ -782,7 +763,6 @@ async def delete_all_channel_msgs(client, message):
 
 @app.on_message(filters.command("addnewbot") & filters.private)
 async def add_new_bot(client, message):
-    """Admin adds a slave bot by token. Bot is stored in DB and started."""
     if message.from_user.id != ADMIN_ID:
         return await message.reply_text("❌ Unauthorized.", parse_mode=ParseMode.HTML)
 
@@ -795,7 +775,6 @@ async def add_new_bot(client, message):
 
     token = args[1].strip()
 
-    # Basic token format check
     if ":" not in token or len(token) < 30:
         return await message.reply_text("❌ Invalid bot token format.", parse_mode=ParseMode.HTML)
 
@@ -803,7 +782,6 @@ async def add_new_bot(client, message):
     if existing:
         return await message.reply_text("⚠️ This bot token is already registered.", parse_mode=ParseMode.HTML)
 
-    # Validate token by fetching bot info
     try:
         test_client = Client(
             f"slave_{token[:8]}",
@@ -835,10 +813,9 @@ async def add_new_bot(client, message):
 
 
 def _start_slave_process(token: str):
-    """Launch slave bot.py as a subprocess with a different token."""
     if token in slave_processes:
         proc = slave_processes[token]
-        if proc.poll() is None:  # still running
+        if proc.poll() is None: 
             return
     try:
         proc = subprocess.Popen(
@@ -852,7 +829,6 @@ def _start_slave_process(token: str):
         print(f"❌ Failed to start slave: {e}")
 
 
-# ── Engine Dashboard (button) ──────────────────────────────────────────────────
 @app.on_callback_query(filters.regex("^engine_dashboard$"))
 async def cb_engine_dashboard(client, cq):
     if cq.from_user.id != ADMIN_ID:
@@ -918,9 +894,7 @@ async def cb_engine_toggle(client, cq):
         else:
             await cq.answer("ℹ️ Bot was not running.", show_alert=True)
 
-    # Refresh dashboard
     await cb_engine_dashboard(client, cq)
-
 
 # ==========================================
 # 2️⃣ MESSAGE CATCHER
@@ -939,28 +913,16 @@ async def enqueue_message(client, message):
     topic_id     = connection.get("topic_id")
     channel_name = connection.get("channel_name", f"Channel {chat_id}")
 
+    # FIX 1: Using built-in create_forum_topic instead of raw Invoke
     if not topic_id:
         if chat_id not in TOPIC_LOCKS:
             TOPIC_LOCKS[chat_id] = True
             try:
-                await app.get_chat(SPECIAL_GROUP_ID)
-                peer         = await app.resolve_peer(SPECIAL_GROUP_ID)
-                channel_input = InputChannel(channel_id=peer.channel_id, access_hash=peer.access_hash)
-                raw_result   = await app.invoke(
-                    CreateForumTopic(
-                        channel=channel_input,
-                        title=channel_name[:128],
-                        random_id=random.randint(100000, 999999999)
-                    )
+                topic = await client.create_forum_topic(
+                    chat_id=SPECIAL_GROUP_ID,
+                    title=channel_name[:128]
                 )
-                if hasattr(raw_result, 'updates'):
-                    for upd in raw_result.updates:
-                        if hasattr(upd, 'message') and hasattr(upd.message, 'id'):
-                            topic_id = upd.message.id
-                            break
-                        elif hasattr(upd, 'id'):
-                            topic_id = upd.id
-                            break
+                topic_id = topic.id
                 if topic_id:
                     await connections_db.update_one(
                         {"private_channel_id": chat_id},
@@ -975,7 +937,9 @@ async def enqueue_message(client, message):
             recheck  = await connections_db.find_one({"private_channel_id": chat_id})
             topic_id = recheck.get("topic_id") if recheck else None
 
+    # FIX 2: Passing specific client so slave bots don't crash the queue
     await message_queue.put({
+        "client": client,
         "message": message,
         "public_id": connection["public_channel_id"],
         "topic_id": topic_id
@@ -999,13 +963,14 @@ async def process_queue():
         batch_items.sort(key=lambda x: x["message"].id)
 
         for item in batch_items:
+            client           = item["client"] # using the passed client
             message          = item["message"]
             public_channel_id = item["public_id"]
             topic_id         = item["topic_id"]
 
             try:
                 if BOT_USERNAME is None:
-                    bot_info     = await app.get_me()
+                    bot_info     = await client.get_me()
                     BOT_USERNAME = bot_info.username
 
                 msg_id  = message.id
@@ -1014,15 +979,15 @@ async def process_queue():
                 # Backup to super group
                 try:
                     if topic_id:
-                        await app.copy_message(
+                        await client.copy_message(
                             chat_id=SPECIAL_GROUP_ID, from_chat_id=chat_id,
                             message_id=msg_id, reply_to_message_id=int(topic_id)
                         )
                     else:
-                        await app.copy_message(chat_id=SPECIAL_GROUP_ID, from_chat_id=chat_id, message_id=msg_id)
+                        await client.copy_message(chat_id=SPECIAL_GROUP_ID, from_chat_id=chat_id, message_id=msg_id)
                 except FloodWait as e:
                     await asyncio.sleep(e.value)
-                    await app.copy_message(chat_id=SPECIAL_GROUP_ID, from_chat_id=chat_id, message_id=msg_id)
+                    await client.copy_message(chat_id=SPECIAL_GROUP_ID, from_chat_id=chat_id, message_id=msg_id)
                 except Exception as e:
                     print(f"⚠️ Supergroup backup error: {e}")
 
@@ -1039,21 +1004,21 @@ async def process_queue():
                         short_code = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
                         await links_db.insert_one({"short_code": short_code, "chat_id": chat_id, "msg_id": msg_id})
                         button = InlineKeyboardMarkup([[InlineKeyboardButton("▶️ Watch Video", callback_data=f"vid_{short_code}")]])
-                        await app.send_message(
+                        await client.send_message(
                             chat_id=public_channel_id, text=caption,
                             reply_markup=button, parse_mode=ParseMode.HTML, protect_content=True
                         )
                     else:
-                        await app.copy_message(chat_id=public_channel_id, from_chat_id=chat_id, message_id=msg_id)
+                        await client.copy_message(chat_id=public_channel_id, from_chat_id=chat_id, message_id=msg_id)
                 except FloodWait as e:
                     await asyncio.sleep(e.value)
                     if is_video:
-                        await app.send_message(
+                        await client.send_message(
                             chat_id=public_channel_id, text=caption,
                             reply_markup=button, parse_mode=ParseMode.HTML, protect_content=True
                         )
                     else:
-                        await app.copy_message(chat_id=public_channel_id, from_chat_id=chat_id, message_id=msg_id)
+                        await client.copy_message(chat_id=public_channel_id, from_chat_id=chat_id, message_id=msg_id)
 
                 await stats_db.update_one({"type": "global"}, {"$inc": {"total_files_processed": 1}}, upsert=True)
 
@@ -1064,12 +1029,9 @@ async def process_queue():
 
 
 # ==========================================
-# 🔄 FIX: STARTUP CHANNEL CACHING
-# Prevents PeerIdInvalid after restart
+# 🔄 STARTUP CHANNEL CACHING
 # ==========================================
 async def cache_channels_on_startup():
-    """Loop DB connections, call get_chat() to populate Pyrogram peer cache,
-       then send a restart notification to each source channel."""
     print("🔄 Caching channels from database...")
     connections = await connections_db.find({}).to_list(length=None)
 
@@ -1078,16 +1040,14 @@ async def cache_channels_on_startup():
         pub_id   = conn.get("public_channel_id")
         sp_id    = SPECIAL_GROUP_ID
 
-        # Cache all three peers
         for cid in [priv_id, pub_id, sp_id]:
             if cid:
                 try:
                     await app.get_chat(cid)
                     await asyncio.sleep(0.3)
                 except Exception as e:
-                    print(f"⚠️ Could not cache chat {cid}: {e}")
+                    pass
 
-        # Send restart notification to source channel
         if priv_id:
             try:
                 await app.send_message(
@@ -1096,9 +1056,8 @@ async def cache_channels_on_startup():
                     parse_mode=ParseMode.HTML
                 )
             except Exception as e:
-                print(f"⚠️ Could not send restart notice to {priv_id}: {e}")
+                pass
 
-    # Also cache the special supergroup
     try:
         await app.get_chat(SPECIAL_GROUP_ID)
     except Exception:
@@ -1141,9 +1100,9 @@ async def check_expirations():
                             pass
                         await sudo_db.update_one({"user_id": user_id}, {"$set": {"last_notified": now}})
                 except Exception as e:
-                    print(f"Reminder error for {user.get('user_id')}: {e}")
+                    pass
         except Exception as e:
-            print(f"Expiry checker error: {e}")
+            pass
         await asyncio.sleep(21600)
 
 
@@ -1151,9 +1110,6 @@ async def check_expirations():
 # 🤖 SLAVE BOT RUNNER (subprocess mode)
 # ==========================================
 def run_as_slave(slave_token: str):
-    """When launched with --slave-token, run as a minimal slave that uses
-       the same MongoDB logic but with a different bot token."""
-    import pyrogram
     slave = Client(
         f"slave_{slave_token[:8]}",
         api_id=API_ID,
@@ -1170,47 +1126,50 @@ def run_as_slave(slave_token: str):
         owner_id = connection.get("user_id")
         if not await is_sudo(owner_id):
             return
+        
+        # FIX: Pass client to queue here as well
         await message_queue.put({
+            "client": client,
             "message": message,
             "public_id": connection["public_channel_id"],
             "topic_id": connection.get("topic_id")
         })
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(process_queue())
-    slave.run()
+    async def start_slave():
+        await slave.start()
+        asyncio.create_task(process_queue())
+        await idle()  # FIX 3: Keep-alive
+        await slave.stop()
+
+    asyncio.run(start_slave())
 
 
 # ==========================================
 # 🚀 MAIN ENTRYPOINT
 # ==========================================
 if __name__ == "__main__":
-    # Check if running as slave
     if "--slave-token" in sys.argv:
         idx   = sys.argv.index("--slave-token")
         token = sys.argv[idx + 1]
         print(f"🤖 Running as slave bot: {token[:8]}...")
         run_as_slave(token)
     else:
-        # Master bot
         print("🚀 Master Bot starting...")
 
         async def main():
-            async with app:
-                # Startup tasks
-                await cache_channels_on_startup()
+            await app.start()
+            await cache_channels_on_startup()
 
-                # Start slave bots from DB
-                active_slaves = await engine_bots_db.find({"status": "on"}).to_list(length=None)
-                for bot_doc in active_slaves:
-                    _start_slave_process(bot_doc["token"])
-                    print(f"▶️ Re-launched slave: @{bot_doc.get('username')}")
+            active_slaves = await engine_bots_db.find({"status": "on"}).to_list(length=None)
+            for bot_doc in active_slaves:
+                _start_slave_process(bot_doc["token"])
+                print(f"▶️ Re-launched slave: @{bot_doc.get('username')}")
 
-                # Background tasks
-                asyncio.create_task(process_queue())
-                asyncio.create_task(check_expirations())
+            asyncio.create_task(process_queue())
+            asyncio.create_task(check_expirations())
 
-                print("✅ All systems online. Bot is running.")
-                await asyncio.Event().wait()  # Keep alive
+            print("✅ All systems online. Bot is running.")
+            await idle()  # FIX 3: Replaced the freezing event wait with idle
+            await app.stop()
 
         asyncio.run(main())
