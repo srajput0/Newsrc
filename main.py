@@ -1,5 +1,4 @@
 
-
 import asyncio
 import random
 import string
@@ -20,7 +19,7 @@ from pyrogram.errors import FloodWait, PeerIdInvalid
 # ==========================================
 API_ID = 20137104
 API_HASH = "1209338eedc55ab701dd2e9d353c05ad"
-BOT_TOKEN = "8797515244:AAEP7za-JSFuqLuSV1IHtE1lXFn2nmwVLeY"
+BOT_TOKEN = "8437872953:AAGxC8Mx7flsts_ISg_jGg2OWMiUqrYIcq8"
 MONGO_URI = "mongodb+srv://tigerbundle282:tTaRXh353IOL9mj2@testcookies.2elxf.mongodb.net/?retryWrites=true&w=majority&appName=Testcookies"
 SPECIAL_GROUP_ID = -1003667939361
 ADMIN_ID = 5050578106  
@@ -57,17 +56,22 @@ async def is_sudo(user_id):
     return True
 
 async def cache_and_notify(client):
+    """Bot Restart Notification Fix"""
     try:
         cursor = connections_db.find({})
         async for conn in cursor:
-            try:
-                chat_id = conn["private_channel_id"]
-                await client.get_chat(chat_id)
-                # 👇 Bot restart hote hi source channels me msg jayega
-                await client.send_message(chat_id, "🔄 <b>Bot Restarted Successfully!</b>\n<i>System is now online and caching complete.</i>", parse_mode=ParseMode.HTML)
-                await client.get_chat(conn["public_channel_id"])
-            except Exception: pass
-            await asyncio.sleep(1) # Delay taaki FloodWait na aaye
+            chat_id = conn.get("private_channel_id")
+            if chat_id:
+                try:
+                    # Direct message bhejega, bina validation ke taaki error na aaye
+                    await client.send_message(
+                        chat_id, 
+                        "🔄 <b>Bot Restarted Successfully!</b>\n<i>System is now online and ready.</i>", 
+                        parse_mode=ParseMode.HTML
+                    )
+                except Exception:
+                    pass # Agar ye bot us channel me admin nahi hai toh skip kar dega
+            await asyncio.sleep(0.5) 
     except Exception: pass
 
 
@@ -81,7 +85,7 @@ def get_main_menu_keyboard(viewer_id):
         [InlineKeyboardButton("📖 Guide", callback_data="btn_guide"), InlineKeyboardButton("🛠 Commands", callback_data="btn_commands")]
     ]
     if viewer_id == ADMIN_ID:
-        buttons.append([InlineKeyboardButton("🤖 Engine Dashboard", callback_data="btn_engine"), InlineKeyboardButton("👑 Sudo List", callback_data="btn_sudolist")])
+        buttons.append([InlineKeyboardButton("🤖 Engine Dashboard", callback_data="btn_engine")])
     return InlineKeyboardMarkup(buttons)
 
 async def start_handler(client, message):
@@ -133,14 +137,14 @@ async def start_handler(client, message):
         except Exception as e:
             await message.reply_text("❌ <b>Sorry, a technical error occurred.</b>", parse_mode=ParseMode.HTML)
     else:
-        # 🎨 START WELCOME MENU
+        # 🎨 CLEAN START MENU
         if await is_sudo(viewer_id):
             welcome_text = "👋 <b>Welcome 🦋!</b>\n\nMain ek <b>Professional Forwarder Bot</b> hu. Aap niche diye buttons se bina kisi command ke apne channels setup kar sakte hain.\n\n⚡ <i>*Ek sath unlimited slots use karein!*</i>"
             await message.reply_text(welcome_text, reply_markup=get_main_menu_keyboard(viewer_id), parse_mode=ParseMode.HTML)
         else:
             await message.reply_text("⚙️ <b><u>How to Setup:</u></b>\n\n<b>1.</b> Add me as an <b>Admin</b> in both channels.\n<b>2.</b> You need an active Sudo Subscription.", parse_mode=ParseMode.HTML)
 
-# 📄 PAGINATION UI
+# 📄 PAGINATION UI (Video Access)
 async def send_paginated_videoaccess(client, message, owner_id, page=0, is_edit=False):
     ITEMS_PER_PAGE = 10
     stats = await viewer_stats_db.find({"owner_id": owner_id}).sort("view_count", -1).to_list(length=None)
@@ -173,7 +177,7 @@ async def send_paginated_videoaccess(client, message, owner_id, page=0, is_edit=
 
 
 # ==========================================
-# 🎛 CALLBACKS & BUTTON CLICKS
+# 🎛 CALLBACKS (Only for Connect & Navigation)
 # ==========================================
 async def handle_callbacks(client, callback_query):
     data = callback_query.data
@@ -188,7 +192,7 @@ async def handle_callbacks(client, callback_query):
         await msg.edit_text("👋 <b>Welcome 🦋!</b>\n\nMain ek <b>Professional Forwarder Bot</b> hu. Aap niche diye buttons se bina kisi command ke apne channels setup kar sakte hain.\n\n⚡ <i>*Ek sath unlimited slots use karein!*</i>", reply_markup=get_main_menu_keyboard(user_id), parse_mode=ParseMode.HTML)
     
     elif data == "btn_connect_menu":
-        text = "🛠 <b>MANAGING SLOT</b>\n\nAap IDs automatically set kar sakte hain bina type kiye! Bas niche diye gaye buttons dabakar bot ko apne channel me admin banayein."
+        text = "🛠 <b>MANAGING SLOT 1</b>\n\nAap IDs automatically set kar sakte hain bina type kiye! Bas niche diye gaye buttons dabakar bot ko apne channel me admin banayein."
         buttons = [
             [InlineKeyboardButton("⚡ Auto Add Source +", callback_data="btn_auto_source_prompt")],
             [InlineKeyboardButton("⚡ Auto Add Target +", callback_data="btn_auto_target_prompt")],
@@ -199,7 +203,7 @@ async def handle_callbacks(client, callback_query):
 
     elif data == "btn_auto_source_prompt":
         USER_STATES[user_id] = {"state": "auto_source"}
-        text = "🚀 <b>[SLOT] AUTO-SOURCE SETUP</b>\n\nNiche diye button pe click karein, apna Source channel chunein aur bot ko Admin promote karein.\n\n*(Bot apne aap ID save kar lega!)*"
+        text = "🚀 <b>[SLOT 1] AUTO-SOURCE SETUP</b>\n\nNiche diye button pe click karein, apna Source channel chunein aur bot ko Admin promote karein.\n\n*(Bot apne aap ID save kar lega!)*"
         url_btn = InlineKeyboardMarkup([[InlineKeyboardButton("📥 Add Source Channel ↗", url=f"https://t.me/{bot_info.username}?startchannel=admin&admin=post_messages+edit_messages+delete_messages")], [InlineKeyboardButton("⬅️ Back", callback_data="btn_connect_menu")]])
         await msg.edit_text(text, reply_markup=url_btn, parse_mode=ParseMode.HTML)
 
@@ -207,7 +211,7 @@ async def handle_callbacks(client, callback_query):
         if user_id not in USER_STATES or "source" not in USER_STATES[user_id]:
             return await callback_query.answer("⚠️ Pehle 'Auto Add Source +' dabakar Source channel save karein!", show_alert=True)
         USER_STATES[user_id]["state"] = "auto_target"
-        text = "🚀 <b>[SLOT] AUTO-TARGET SETUP</b>\n\nAb niche click karke apne Public/Target channel me bot ko Admin banayein."
+        text = "🚀 <b>[SLOT 1] AUTO-TARGET SETUP</b>\n\nAb niche click karke apne Public/Target channel me bot ko Admin banayein."
         url_btn = InlineKeyboardMarkup([[InlineKeyboardButton("📤 Add Target Channel ↗", url=f"https://t.me/{bot_info.username}?startchannel=admin&admin=post_messages+edit_messages+delete_messages")], [InlineKeyboardButton("⬅️ Back", callback_data="btn_connect_menu")]])
         await msg.edit_text(text, reply_markup=url_btn, parse_mode=ParseMode.HTML)
 
@@ -215,35 +219,36 @@ async def handle_callbacks(client, callback_query):
         USER_STATES[user_id] = {"state": "manual_source"}
         await msg.edit_text("✏️ <b>MANUAL SETUP</b>\n\nPlease send your <b>Private / Source Channel ID</b> (e.g. -100123...)", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Cancel", callback_data="btn_connect_menu")]]), parse_mode=ParseMode.HTML)
 
+    # REVERTED TO PURE TEXT INSTRUCTIONS
     elif data == "btn_commands":
-        await msg.edit_text("🛠 <b>COMMANDS & SETTINGS</b>", reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("⚙️ Global Limit", callback_data="btn_global_limit"), InlineKeyboardButton("⚙️ Channel Limit", callback_data="btn_channel_limit")],
-            [InlineKeyboardButton("📊 Bot Status", callback_data="btn_status"), InlineKeyboardButton("🧹 Clean Channel", callback_data="btn_deleteall")],
-            [InlineKeyboardButton("⬅️ Back", callback_data="btn_main_menu")]
-        ]), parse_mode=ParseMode.HTML)
+        cmd_text = (
+            "🛠 <b>BOT COMMANDS LIST</b>\n\n"
+            "Use these commands directly in chat:\n\n"
+            "🔹 `/dailyaccess [number]` - Set global limit\n"
+            "🔹 `/channelaccess [ID] [number]` - Limit for specific channel\n"
+            "🔹 `/deleteall [ID]` - Clear all messages in channel\n"
+            "🔹 `/status` - Check bot server status\n"
+            "🔹 `/videoaccess` - View detailed access list\n"
+        )
+        await msg.edit_text(cmd_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="btn_main_menu")]]), parse_mode=ParseMode.HTML)
     
     elif data == "btn_guide":
-        await msg.edit_text("📖 <b>GUIDE:</b>\n1. Use 'Connect New Channel' to link private & public channels.\n2. Go to Commands to set daily limits.\n3. Bot will Auto-forward and protect files.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="btn_main_menu")]]), parse_mode=ParseMode.HTML)
-
-    elif data == "btn_global_limit":
-        USER_STATES[user_id] = {"state": "global_limit"}
-        await msg.edit_text("⚙️ <b>Set Global Daily Limit</b>\n\nSend a number (e.g. <code>5</code>). Send <code>0</code> for Unlimited.", parse_mode=ParseMode.HTML)
-    elif data == "btn_channel_limit":
-        USER_STATES[user_id] = {"state": "channel_limit"}
-        await msg.edit_text("⚙️ <b>Set Specific Channel Limit</b>\n\nSend ID and Limit: <code>-100123456789 5</code>", parse_mode=ParseMode.HTML)
-    elif data == "btn_deleteall":
-        USER_STATES[user_id] = {"state": "clean_channel"}
-        await msg.edit_text("🧹 <b>Clean Channel Messages</b>\n\nSend the <b>Channel ID</b> you want to clean.", parse_mode=ParseMode.HTML)
+        await msg.edit_text("📖 <b>GUIDE:</b>\n1. Use 'Connect New Channel' to link private & public channels automatically.\n2. Send commands like `/dailyaccess 5` directly to set limits.\n3. The Bot will Auto-forward and protect files.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="btn_main_menu")]]), parse_mode=ParseMode.HTML)
 
     elif data.startswith("btn_videoaccess_"):
         page = int(data.split("_")[-1])
         await send_paginated_videoaccess(client, msg, user_id, page, is_edit=True)
-    elif data == "btn_status":
-        await status_handler(client, msg, is_edit=True)
+        
     elif data == "btn_engine":
-        await engine_dashboard(client, msg, is_edit=True)
-    elif data == "btn_sudolist":
-        await sudolist_handler(client, msg, is_callback=True)
+        bots = await hosted_bots_db.find().to_list(length=None)
+        text = "🛠 <b><u>Engine Dashboard:</u></b>\n\n" if bots else "🛠 No bots. Use `/addnewbot <token>`"
+        buttons = []
+        for b in bots:
+            b_id, status = b["bot_id"], "🟢" if b["status"] == "on" else "🔴"
+            text += f"🤖 ID: `{b_id}` - {status}\n"
+            buttons.append([InlineKeyboardButton(f"{'OFF' if status=='🟢' else 'ON'} {b_id}", callback_data=f"toggle_{b_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ Back", callback_data="btn_main_menu")])
+        await msg.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.HTML)
 
     elif data.startswith("toggle_"):
         if user_id != ADMIN_ID: return
@@ -255,11 +260,11 @@ async def handle_callbacks(client, callback_query):
         else:
             await hosted_bots_db.update_one({"bot_id": bot_id}, {"$set": {"status": "on"}})
             await start_slave_client(bot_data["bot_token"])
-        await engine_dashboard(client, msg, is_edit=True)
+        await callback_query.answer("Status Updated!", show_alert=True)
 
 
 # ==========================================
-# ⚡ AUTO-CONNECT ID CATCHER & TEXT HANDLERS
+# ⚡ AUTO-CONNECT ID CATCHER
 # ==========================================
 async def auto_admin_tracker(client, update):
     if not update.new_chat_member: return
@@ -284,6 +289,7 @@ async def auto_admin_tracker(client, update):
                 await connections_db.update_one({"private_channel_id": source_id}, {"$set": {"user_id": user_id, "public_channel_id": chat_id, "channel_name": source_name}}, upsert=True)
                 await client.send_message(user_id, f"✅ <b>Channels Connected!</b> 🎉\n\n<b>Source:</b> {source_name}\n<b>Target:</b> {chat_title}", parse_mode=ParseMode.HTML)
 
+# Manual Connect Tracker
 async def text_state_handler(client, message):
     user_id = message.from_user.id
     if user_id in USER_STATES:
@@ -308,110 +314,128 @@ async def text_state_handler(client, message):
                 await message.reply_text("✅ <b>Channels Connected!</b>")
             except: await message.reply_text("❌ Valid numeric ID bhejein.")
 
-        elif state == "global_limit":
-            try:
-                limit = int(message.text)
-                if limit < 0: raise ValueError
-                del USER_STATES[user_id]
-                await sudo_db.update_one({"user_id": user_id}, {"$set": {"global_daily_limit": limit}}, upsert=True)
-                await message.reply_text(f"✅ Global Limit Set to {limit}." if limit > 0 else "✅ Global Limit Removed.")
-            except: await message.reply_text("❌ Invalid Number.")
-
-        elif state == "channel_limit":
-            args = message.text.split()
-            if len(args) != 2: return await message.reply_text("❌ Format: `-100123456789 5`")
-            try:
-                channel_id, limit_str = int(args[0]), args[1].lower()
-                conn = await connections_db.find_one({"private_channel_id": channel_id, "user_id": user_id})
-                if not conn: return await message.reply_text("❌ Channel not yours.")
-                del USER_STATES[user_id]
-                if limit_str == "default":
-                    await connections_db.update_one({"private_channel_id": channel_id}, {"$unset": {"custom_limit": ""}})
-                    await message.reply_text("✅ Channel limit removed.")
-                else:
-                    await connections_db.update_one({"private_channel_id": channel_id}, {"$set": {"custom_limit": int(limit_str)}})
-                    await message.reply_text(f"✅ Limit set to {limit_str}.")
-            except: pass
-
-        elif state == "clean_channel":
-            try:
-                channel_id = int(message.text)
-                del USER_STATES[user_id]
-                await deleteall_handler(client, message, override_id=channel_id)
-            except: await message.reply_text("❌ Invalid ID.")
-
 
 # ==========================================
-# 🛑 DASHBOARDS & ENGINE
+# 🛑 ORIGINAL SLASH COMMANDS RESTORED
 # ==========================================
-async def status_handler(client, message, is_edit=False):
-    user_id = message.from_user.id
-    cpu, ram = psutil.cpu_percent(interval=0.5), psutil.virtual_memory().percent
-    global_data = await stats_db.find_one({"type": "global"}) or {}
-    views, files = global_data.get("total_video_views", 0), global_data.get("total_files_processed", 0)
-    msg_txt = f"📊 <b>BOT STATUS</b>\n🖥 <b>CPU:</b> `{cpu}%` | <b>RAM:</b> `{ram}%`\n🌐 <b>Files:</b> `{files}` | <b>Views:</b> `{views}`\n\n"
-    if user_id == ADMIN_ID: msg_txt += "👑 <b>Admin View Active</b>"
-    else:
-        u_channels = await connections_db.count_documents({"user_id": user_id})
-        sudo_u = await sudo_db.find_one({"user_id": user_id})
-        exp = f"{(sudo_u['expiry_date'] - datetime.utcnow()).days} Days" if sudo_u and sudo_u.get("expiry_date") else "Unknown"
-        msg_txt += f"👤 <b>Your Channels:</b> `{u_channels}`\n⏳ <b>Subscription:</b> `{exp}`"
-
-    btn = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="btn_commands")]])
-    if is_edit: await message.edit_text(msg_txt, reply_markup=btn, parse_mode=ParseMode.HTML)
-    else: await message.reply_text(msg_txt, reply_markup=btn, parse_mode=ParseMode.HTML)
-
-async def deleteall_handler(client, message, override_id=None):
-    channel_id = override_id
-    if not channel_id:
-        try: channel_id = int(message.text.split()[1])
-        except: return await message.reply_text("❌ `/deleteall -100ID`")
-    status_msg = await message.reply_text("⏳ <b>Scanning channel...</b>")
+@app.on_message(filters.command("dailyaccess") & filters.private)
+async def dailyaccess_handler(client, message):
+    owner_id = message.from_user.id
+    if not await is_sudo(owner_id): return await message.reply_text("❌ <b>Access Denied!</b>", parse_mode=ParseMode.HTML)
+    args = message.text.split()
+    if len(args) < 2: return await message.reply_text("❌ <b>Format:</b> <code>/dailyaccess [Number]</code>", parse_mode=ParseMode.HTML)
     try:
-        dummy = await client.send_message(channel_id, "<i>Cleaning...</i>")
-        latest = dummy.id
-        await status_msg.edit_text(f"⏳ <b>Cleaning...</b> IDs: {latest}")
-        for i in range(latest, 0, -100):
+        limit = int(args[1])
+        if limit < 0: raise ValueError
+        await sudo_db.update_one({"user_id": owner_id}, {"$set": {"global_daily_limit": limit}}, upsert=True)
+        msg = f"✅ <b>Global Daily Limit Set!</b> Users can watch <b>{limit} videos per day</b>." if limit > 0 else "✅ <b>Global Limit Removed! (Unlimited)</b>"
+        await message.reply_text(msg, parse_mode=ParseMode.HTML)
+    except ValueError: await message.reply_text("❌ <b>Please provide a valid number.</b>", parse_mode=ParseMode.HTML)
+
+@app.on_message(filters.command("channelaccess") & filters.private)
+async def channelaccess_handler(client, message):
+    owner_id = message.from_user.id
+    if not await is_sudo(owner_id): return await message.reply_text("❌ <b>Access Denied!</b>", parse_mode=ParseMode.HTML)
+    args = message.text.split()
+    if len(args) < 3: return await message.reply_text("❌ <b>Format:</b> <code>/channelaccess -100ChannelID [Number]</code>", parse_mode=ParseMode.HTML)
+    try:
+        channel_id, limit_str = int(args[1]), args[2].lower()
+        conn = await connections_db.find_one({"private_channel_id": channel_id, "user_id": owner_id})
+        if not conn: return await message.reply_text("❌ <b>Channel not found or you don't own it.</b>", parse_mode=ParseMode.HTML)
+
+        if limit_str == "default":
+            await connections_db.update_one({"private_channel_id": channel_id}, {"$unset": {"custom_limit": ""}})
+            await message.reply_text(f"✅ <b>Custom limit removed for {conn.get('channel_name')}.</b>", parse_mode=ParseMode.HTML)
+        else:
+            limit = int(limit_str)
+            if limit < 0: raise ValueError
+            await connections_db.update_one({"private_channel_id": channel_id}, {"$set": {"custom_limit": limit}})
+            await message.reply_text(f"✅ <b>Limit set to {limit} videos/day.</b>", parse_mode=ParseMode.HTML)
+    except ValueError: await message.reply_text("❌ <b>Invalid format.</b>", parse_mode=ParseMode.HTML)
+
+@app.on_message(filters.command("deleteall") & filters.private)
+async def deleteall_handler(client, message):
+    owner_id = message.from_user.id
+    if not await is_sudo(owner_id): return await message.reply_text("❌ <b>Access Denied!</b>", parse_mode=ParseMode.HTML)
+    args = message.text.split()
+    if len(args) < 2: return await message.reply_text("❌ <b>Format:</b> <code>/deleteall -100ChannelID</code>", parse_mode=ParseMode.HTML)
+    try: channel_id = int(args[1])
+    except ValueError: return await message.reply_text("❌ <b>Invalid Channel ID.</b>", parse_mode=ParseMode.HTML)
+    status_msg = await message.reply_text("⏳ <b>Channel scan kiya ja raha hai...</b>", parse_mode=ParseMode.HTML)
+    try:
+        dummy_msg = await client.send_message(channel_id, "<i>Cleaning in progress...</i>", parse_mode=ParseMode.HTML)
+        latest_msg_id = dummy_msg.id
+        await status_msg.edit_text(f"⏳ <b>Message deletion shuru!</b> IDs: {latest_msg_id}", parse_mode=ParseMode.HTML)
+        for i in range(latest_msg_id, 0, -100):
             try:
                 await client.delete_messages(channel_id, list(range(i, max(0, i - 100), -1)))
                 await asyncio.sleep(2.5)
             except FloodWait as e: await asyncio.sleep(e.value)
-            except: pass
-        await status_msg.edit_text("✅ <b>Channel clean.</b>")
-    except: await status_msg.edit_text("❌ Error! Cache issue.")
+            except Exception: pass
+        await status_msg.edit_text(f"✅ <b>Mission Successful!</b> Channel clean.", parse_mode=ParseMode.HTML)
+    except Exception: await status_msg.edit_text("❌ <b>Error:</b> Cache issue.", parse_mode=ParseMode.HTML)
 
-async def engine_dashboard(client, message, is_edit=False):
-    bots = await hosted_bots_db.find().to_list(length=None)
-    text = "🛠 <b><u>Engine Dashboard:</u></b>\n\n" if bots else "🛠 No bots. Use `/addnewbot <token>`"
-    buttons = []
-    for b in bots:
-        b_id, status = b["bot_id"], "🟢" if b["status"] == "on" else "🔴"
-        text += f"🤖 ID: `{b_id}` - {status}\n"
-        buttons.append([InlineKeyboardButton(f"{'OFF' if status=='🟢' else 'ON'} {b_id}", callback_data=f"toggle_{b_id}")])
-    buttons.append([InlineKeyboardButton("⬅️ Back", callback_data="btn_main_menu")])
-    markup = InlineKeyboardMarkup(buttons)
-    if is_edit: await message.edit_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
-    else: await message.reply_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+@app.on_message(filters.command("status") & filters.private)
+async def status_handler(client, message):
+    user_id = message.from_user.id
+    if not await is_sudo(user_id): return await message.reply_text("❌ <b>Access Denied!</b>", parse_mode=ParseMode.HTML)
+    cpu_usage, ram_usage = psutil.cpu_percent(interval=0.5), psutil.virtual_memory().percent
+    global_data = await stats_db.find_one({"type": "global"}) or {}
+    total_views, total_files = global_data.get("total_video_views", 0), global_data.get("total_files_processed", 0)
 
-async def sudolist_handler(client, message, is_callback=False):
+    stats_msg = f"📊 <b><u>BOT SYSTEM STATUS</u></b> 📊\n\n🖥 <b>CPU:</b> `{cpu_usage}%` | <b>RAM:</b> `{ram_usage}%`\n🌐 <b>Files:</b> `{total_files}` | <b>Views:</b> `{total_views}`\n\n"
+    if user_id == ADMIN_ID:
+        connections = await connections_db.find({}).to_list(length=None)
+        user_channels = {}
+        for conn in connections:
+            uid = conn["user_id"]
+            if uid not in user_channels: user_channels[uid] = []
+            user_channels[uid].append(conn.get("channel_name", "Unknown Channel"))
+        for uid, channels in user_channels.items(): stats_msg += f"👤 <b>Owner:</b> `{uid}`\n📢 <b>Channels:</b> {len(channels)}\n"
+    else:
+        u_channels = await connections_db.count_documents({"user_id": user_id})
+        sudo_u = await sudo_db.find_one({"user_id": user_id})
+        expiry_txt = f"{(sudo_u['expiry_date'] - datetime.utcnow()).days} Days" if sudo_u and sudo_u.get("expiry_date") else "Unknown"
+        stats_msg += f"👤 <b>Your Channels:</b> `{u_channels}`\n⏳ <b>Subscription:</b> `{expiry_txt}`"
+
+    await message.reply_text(stats_msg[:4000], parse_mode=ParseMode.HTML)
+
+@app.on_message(filters.command("videoaccess") & filters.private)
+async def videoaccess_handler(client, message):
+    owner_id = message.from_user.id
+    if not await is_sudo(owner_id): return await message.reply_text("❌ <b>Access Denied!</b>", parse_mode=ParseMode.HTML)
+    await send_paginated_videoaccess(client, message, owner_id)
+
+@app.on_message(filters.command("sudolist") & filters.private)
+async def sudolist_handler(client, message):
+    if message.from_user.id != ADMIN_ID: return
     users = await sudo_db.find({}).to_list(length=None)
     text = "👑 <b><u>SUDO USERS</u></b>\n\n" if users else "📋 No Sudo Users."
     for c, u in enumerate(users, 1):
         exp = u.get("expiry_date")
         status = f"🟢 {(exp - datetime.utcnow()).days} Days" if exp and (exp - datetime.utcnow()).days >= 0 else ("🔴 Expired" if exp else "♾️ Lifetime")
         text += f"<b>{c}. User:</b> `{u['user_id']}`\n   └ {status}\n\n"
-    btn = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="btn_main_menu")]])
-    if is_callback: await message.edit_text(text, reply_markup=btn, parse_mode=ParseMode.HTML)
-    else: await message.reply_text(text, reply_markup=btn, parse_mode=ParseMode.HTML)
+    await message.reply_text(text, parse_mode=ParseMode.HTML)
 
+@app.on_message(filters.command("addsudo") & filters.private)
 async def addsudo_handler(client, message):
     if message.from_user.id != ADMIN_ID: return
+    args = message.text.split()
+    if len(args) < 2: return await message.reply_text("❌ `/addsudo UserID [Days]`")
     try:
-        t_id, days = int(message.text.split()[1]), int(message.text.split()[2]) if len(message.text.split()) > 2 else 30
+        t_id, days = int(args[1]), int(args[2]) if len(args) > 2 else 30
         exp_date = datetime.utcnow() + timedelta(days=days)
         await sudo_db.update_one({"user_id": t_id}, {"$set": {"expiry_date": exp_date, "last_notified": None}}, upsert=True)
         await message.reply_text(f"✅ <b>Sudo Added!</b> `{t_id}` for `{days}` days.")
-    except: pass
+    except Exception: pass
+
+@app.on_message(filters.command("rmsudo") & filters.private)
+async def rmsudo_handler(client, message):
+    if message.from_user.id != ADMIN_ID: return
+    try:
+        await sudo_db.delete_one({"user_id": int(message.text.split()[1])})
+        await message.reply_text("✅ Sudo removed.")
+    except Exception: pass
 
 @app.on_message(filters.command("addnewbot") & filters.private)
 async def addnewbot_cmd(client, message):
@@ -521,15 +545,21 @@ async def check_expirations():
 # 🚀 BINDING & RUNNER
 # ==========================================
 def bind_bot_handlers(bot_client):
+    # Registering Slash Commands (Restored exactly like old format)
     bot_client.add_handler(MessageHandler(start_handler, filters.command("start") & filters.private))
-    bot_client.add_handler(MessageHandler(status_handler, filters.command("status") & filters.private))
+    bot_client.add_handler(MessageHandler(dailyaccess_handler, filters.command("dailyaccess") & filters.private))
+    bot_client.add_handler(MessageHandler(channelaccess_handler, filters.command("channelaccess") & filters.private))
     bot_client.add_handler(MessageHandler(deleteall_handler, filters.command("deleteall") & filters.private))
-    bot_client.add_handler(MessageHandler(addsudo_handler, filters.command("addsudo") & filters.private))
+    bot_client.add_handler(MessageHandler(status_handler, filters.command("status") & filters.private))
+    bot_client.add_handler(MessageHandler(videoaccess_handler, filters.command("videoaccess") & filters.private))
     bot_client.add_handler(MessageHandler(sudolist_handler, filters.command("sudolist") & filters.private))
+    bot_client.add_handler(MessageHandler(addsudo_handler, filters.command("addsudo") & filters.private))
+    bot_client.add_handler(MessageHandler(rmsudo_handler, filters.command("rmsudo") & filters.private))
     
-    bot_client.add_handler(MessageHandler(text_state_handler, filters.text & filters.private & ~filters.command(["start", "status", "deleteall", "addsudo", "sudolist", "addnewbot"])))
+    # Text catcher ONLY for Manual Connection State
+    bot_client.add_handler(MessageHandler(text_state_handler, filters.text & filters.private & ~filters.command(["start", "dailyaccess", "channelaccess", "deleteall", "status", "videoaccess", "sudolist", "addsudo", "rmsudo", "addnewbot"])))
+    
     bot_client.add_handler(CallbackQueryHandler(handle_callbacks, filters.regex(r"^(vid_|btn_|toggle_)")))
-    
     bot_client.add_handler(ChatMemberUpdatedHandler(auto_admin_tracker, filters.group | filters.channel))
     bot_client.add_handler(MessageHandler(enqueue_message, filters.channel))
 
