@@ -267,7 +267,7 @@ async def handle_main_menu_callbacks(client, callback_query):
 # ==========================================
 # ⌨️ DYNAMIC TEXT HANDLER (Daily Access Number)
 # ==========================================
-@app.on_message(filters.private & filters.text)
+@app.on_message(filters.private & filters.text & ~filters.regex(r"^/"))
 async def handle_dynamic_inputs(client, message):
     user_id = message.from_user.id
     
