@@ -2,6 +2,9 @@
 
 
 
+
+
+
 import math
 from pyrogram.enums import ParseMode, ChatMemberStatus
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
@@ -900,127 +903,6 @@ async def enqueue_message(client, message):
         })
 
 # ==========================================
-# 🤖 AUTO DETECT & CONNECT MAGIC WAND (Jo background me ID connect karega)
-# ==========================================
-@app.on_chat_member_updated(filters.channel)
-async def on_bot_added_to_channel(client, update):
-    bot_id = (await app.get_me()).id
-    
-    # Check karein agar bot ko kisi channel me Add ya Promote kiya gaya hai
-    if update.new_chat_member and update.new_chat_member.user.id == bot_id:
-        if update.new_chat_member.status in [ChatMemberStatus.ADMINISTRATOR]:
-            user_id = update.from_user.id
-            if not await is_sudo(user_id):
-                return
-
-            chat_id = update.chat.id
-            chat_title = update.chat.title
-
-            pending_source = PENDING_SOURCES.get(user_id)
-
-            if not pending_source:
-                # 1️⃣ PEHLI BAAR ADD KIYA (Auto Source Detection - Private)
-                try:
-                    peer = await app.resolve_peer(SPECIAL_GROUP_ID)
-                    channel_input = InputChannel(channel_id=peer.channel_id, access_hash=peer.access_hash)
-                    raw_result = await app.invoke(
-                        CreateForumTopic(channel=channel_input, title=chat_title[:128], random_id=random.randint(100000, 999999999))
-                    )
-                    
-                    topic_id = None
-                    if hasattr(raw_result, 'updates'):
-                        for upd in raw_result.updates:
-                            if hasattr(upd, 'message') and hasattr(upd.message, 'id'):
-                                topic_id = upd.message.id; break
-                            elif hasattr(upd, 'id'):
-                                topic_id = upd.id; break
-
-                    # Pending Source memory me save kar lo
-                    PENDING_SOURCES[user_id] = {
-                        "chat_id": chat_id,
-                        "chat_title": chat_title,
-                        "topic_id": topic_id
-                    }
-
-                    await app.send_message(
-                        user_id,
-                        f"✅ <b>SOURCE DETECTED!</b>\n\n"
-                        f"📁 <b>Channel:</b> {chat_title}\n"
-                        f"🗂️ <b>Logging Topic Created.</b>\n\n"
-                        f"⚡ <b>Next Step:</b> Ab <b>Auto Add Target +</b> button dabayein aur apna Public channel connect karein.",
-                        parse_mode=ParseMode.HTML
-                    )
-                except Exception as e:
-                    print(f"Auto Topic Error: {e}")
-                    await app.send_message(user_id, f"⚠️ Source Detected, lekin Master Group me Topic create nahi hua. (Error: {e})")
-
-            else:
-                # 2️⃣ DUSRI BAAR ADD KIYA (Auto Target & Connect!)
-                source_id = pending_source["chat_id"]
-                source_title = pending_source["chat_title"]
-                topic_id = pending_source["topic_id"]
-
-                # Dono channels ko automatically Database me connect kar do
-                await connections_db.update_one(
-                    {"private_channel_id": source_id},
-                    {"$set": {
-                        "user_id": user_id,
-                        "public_channel_id": chat_id,
-                        "channel_name": source_title,
-                        "topic_id": topic_id
-                    }},
-                    upsert=True
-                )
-
-                # Pending list se hata do
-                PENDING_SOURCES.pop(user_id, None)
-
-                await app.send_message(
-                    user_id,
-                    f"🎯 <b>TARGET DETECTED & AUTOMATICALLY CONNECTED!</b>\n\n"
-                    f"✅ <b>Source (Private):</b> {source_title}\n"
-                    f"✅ <b>Target (Public):</b> {chat_title}\n\n"
-                    f"🎉 <i>Bina ID copy-paste kiye, aapke dono channels successfully connect ho gaye hain!</i>",
-                    parse_mode=ParseMode.HTML
-                )
-
-
-# ==========================================
-# 🔌 DISCONNECT CHANNEL COMMAND
-# ==========================================
-@app.on_message(filters.command("disconnect") & filters.private)
-async def disconnect_channels(client, message):
-    user_id = message.from_user.id
-    
-    if not await is_sudo(user_id):
-        return await message.reply_text("❌ <b>Access Denied!</b>", parse_mode=ParseMode.HTML)
-    
-    args = message.text.split()
-    if len(args) < 2:
-        return await message.reply_text(
-            "❌ <b>Format:</b> <code>/disconnect -100PrivateChannelID</code>\n\n"
-            "💡 <i>Apne channels ki ID dekhne ke liye 'Connected Channels' button dabayein.</i>", 
-            parse_mode=ParseMode.HTML
-        )
-    
-    try:
-        channel_id = int(args[1])
-        # Database se connection delete karna
-        result = await connections_db.delete_one({"private_channel_id": channel_id, "user_id": user_id})
-        
-        if result.deleted_count > 0:
-            await message.reply_text("✅ <b>Channel Successfully Disconnected!</b>\nAb is channel se videos forward/process nahi hongi.", parse_mode=ParseMode.HTML)
-        else:
-            await message.reply_text("❌ <b>Channel nahi mila ya aap iske owner nahi hain.</b>", parse_mode=ParseMode.HTML)
-            
-    except ValueError:
-        await message.reply_text("❌ <b>Invalid Channel ID.</b> Kripya sahi ID daalein (jaise: -100123456789).", parse_mode=ParseMode.HTML)
-
-
-
-
-
-# ==========================================
 # 3️⃣ BACKGROUND WORKERS
 # ==========================================
 async def process_queue():
@@ -1150,7 +1032,6 @@ async def check_expirations():
         # Loop ko har 6 ghante me ek baar chalayenge (lekin message sirf 23 hours baad hi jayega if condition ki wajah se)
         await asyncio.sleep(21600) 
 
-
 # ==========================================
 # 🚀 RUN THE BOT
 # ==========================================
@@ -1160,3 +1041,5 @@ if __name__ == "__main__":
     loop.create_task(process_queue())
     loop.create_task(check_expirations()) 
     app.run()
+
+
