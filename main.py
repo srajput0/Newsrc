@@ -32,7 +32,7 @@ ADMIN_ID = 5050578106  # 👈 Apni Telegram ID daalein
 # INITIALIZATION
 # ==========================================
 app = Client(
-    "srcbghssbser_bot1", 
+    "srcbghssbsr_bot1", 
     api_id=API_ID, 
     api_hash=API_HASH, 
     bot_token=BOT_TOKEN,
