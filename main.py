@@ -31,7 +31,7 @@ ADMIN_ID = 5050578106  # 👈 Apni Telegram ID daalein
 # ==========================================
 # INITIALIZATION
 # ==========================================
-app = Client("srcjabghssbslser_bot1", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client("srcbghssbslser_bot1", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 #db_client = AsyncIOMotorClient(MONGO_URI)
 db_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000, connectTimeoutMS=20000, maxIdleTimeMS=50000)
