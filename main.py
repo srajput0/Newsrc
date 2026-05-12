@@ -228,8 +228,7 @@ async def handle_main_menu_callbacks(client, callback_query):
             pass
         await callback_query.answer()
 
-    # 🔗 Connected Channels Button Logic
-        # 🔗 Connected Channels Button Logic (With NEXT/PREV Pagination)
+        # 🔗 Connected Channels Button Logic (With NEXT/PREV Pagination & Syntax Fix)
     elif data.startswith("cmd_connected"):
         await callback_query.answer() # Button ka loading spinner turant rokne ke liye
         
@@ -272,11 +271,15 @@ async def handle_main_menu_callbacks(client, callback_query):
                 except:
                     pass
             
+            # 🔥 ERROR FIX: Backslash error se bachne ke liye string bahar format kar li
+            s_display = f"<a href='{s_link}'>Click Here</a>" if "http" in s_link else s_link
+            t_display = f"<a href='{t_link}'>Click Here</a>" if "http" in t_link else t_link
+
             text += f"📁 <b>{s_name}</b>\n"
             text += f"   ├ <b>Source ID:</b> <code>{s_id}</code>\n"
-            text += f"   ├ <b>Source Link:</b> {f'<a href=\"{s_link}\">Click Here</a>' if 'http' in s_link else s_link}\n"
+            text += f"   ├ <b>Source Link:</b> {s_display}\n"
             text += f"   ├ <b>Target ID:</b> <code>{t_id}</code>\n"
-            text += f"   └ <b>Target Link:</b> {f'<a href=\"{t_link}\">Click Here</a>' if 'http' in t_link else t_link}\n"
+            text += f"   └ <b>Target Link:</b> {t_display}\n"
             text += "━━━━━━━━━━━━━━━━━━━━\n"
 
         # 🔘 NEXT & PREV Buttons Generate karna
