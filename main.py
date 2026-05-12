@@ -229,27 +229,70 @@ async def handle_main_menu_callbacks(client, callback_query):
         await callback_query.answer()
 
     # 🔗 Connected Channels Button Logic
-    elif data == "cmd_connected":
+        # 🔗 Connected Channels Button Logic (With NEXT/PREV Pagination)
+    elif data.startswith("cmd_connected"):
+        await callback_query.answer() # Button ka loading spinner turant rokne ke liye
+        
+        # Page number nikalna (agar sirf "cmd_connected" hai toh 1, warna aage badhega)
+        page = int(data.split("_")[2]) if len(data.split("_")) > 2 else 1
+        limit_per_page = 5 # Ek page me 5 channels dikhayenge taaki message lamba na ho
+        
         connections = await connections_db.find({"user_id": user_id}).to_list(length=None)
         if not connections:
             return await callback_query.answer("❌ No channels connected yet.", show_alert=True)
 
-        text = "🔗 <b><u>Your Connected Channels:</u></b>\n\n"
-        for c in connections:
+        # Pagination ka math (total kitne page banenge)
+        total_pages = math.ceil(len(connections) / limit_per_page)
+        start_idx = (page - 1) * limit_per_page
+        end_idx = start_idx + limit_per_page
+        current_connections = connections[start_idx:end_idx]
+
+        text = f"🔗 <b><u>Your Connected Channels (Page {page}/{total_pages}):</u></b>\n\n"
+        
+        for c in current_connections:
             s_name = c.get("channel_name", "Unknown Name")
             s_id = c.get("private_channel_id", "Unknown")
             t_id = c.get("public_channel_id", "Unknown Target")
             
+            s_link = "<i>Not Available</i>"
+            t_link = "<i>Not Available</i>"
+            
+            # Telegram API se Source Channel ka link nikalna
+            try:
+                s_chat = await client.get_chat(s_id)
+                s_link = f"https://t.me/{s_chat.username}" if s_chat.username else (s_chat.invite_link or "<i>Not Available</i>")
+            except:
+                pass
+                
+            # Telegram API se Target Channel ka link nikalna
+            if t_id != "Unknown Target":
+                try:
+                    t_chat = await client.get_chat(t_id)
+                    t_link = f"https://t.me/{t_chat.username}" if t_chat.username else (t_chat.invite_link or "<i>Not Available</i>")
+                except:
+                    pass
+            
             text += f"📁 <b>{s_name}</b>\n"
             text += f"   ├ <b>Source ID:</b> <code>{s_id}</code>\n"
-            text += f"   └ <b>Target ID:</b> <code>{t_id}</code>\n"
+            text += f"   ├ <b>Source Link:</b> {f'<a href=\"{s_link}\">Click Here</a>' if 'http' in s_link else s_link}\n"
+            text += f"   ├ <b>Target ID:</b> <code>{t_id}</code>\n"
+            text += f"   └ <b>Target Link:</b> {f'<a href=\"{t_link}\">Click Here</a>' if 'http' in t_link else t_link}\n"
             text += "━━━━━━━━━━━━━━━━━━━━\n"
 
-        if len(text) > 4000:
-            text = text[:4000] + "...\n<i>Message too long.</i>"
+        # 🔘 NEXT & PREV Buttons Generate karna
+        nav_buttons = []
+        if page > 1:
+            nav_buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"cmd_connected_{page-1}"))
+        if page < total_pages:
+            nav_buttons.append(InlineKeyboardButton("Next ➡️", callback_data=f"cmd_connected_{page+1}"))
             
-        await callback_query.message.edit_text(text, parse_mode=ParseMode.HTML)
-        await callback_query.answer()
+        keyboard = InlineKeyboardMarkup([nav_buttons]) if nav_buttons else None
+            
+        try:
+            await callback_query.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        except Exception as e:
+            pass
+            
 
     # ⏳ Daily Access Input Button
     elif data == "cmd_dailyaccess":
