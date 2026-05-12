@@ -303,7 +303,7 @@ async def handle_main_menu_callbacks(client, callback_query):
         
         # Page number nikalna
         page = int(data.split("_")[2]) if len(data.split("_")) > 2 else 1
-        limit_per_page = 2 # Ek page me sirf 2 channels dikhayenge taaki clean lage
+        limit_per_page = 10 # Ek page me sirf 2 channels dikhayenge taaki clean lage
         
         connections = await connections_db.find({"user_id": user_id}).to_list(length=None)
         if not connections:
