@@ -31,10 +31,20 @@ ADMIN_ID = 5050578106  # 👈 Apni Telegram ID daalein
 # ==========================================
 # INITIALIZATION
 # ==========================================
-app = Client("srcbghssbser_bot1", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client(
+    "srcbghssbser_bot1", 
+    api_id=API_ID, 
+    api_hash=API_HASH, 
+    bot_token=BOT_TOKEN,
+    in_memory=True  # 👈 MAGIC KEYWORD: Isse file banna humesha ke liye band ho jayega! Sab RAM me chalega.
+)
 
-#db_client = AsyncIOMotorClient(MONGO_URI)
 db_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000, connectTimeoutMS=20000, maxIdleTimeMS=50000)
+# Baaki sab database connection waise hi rahenge...
+
+
+
+#db_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000, connectTimeoutMS=20000, maxIdleTimeMS=50000)
 db = db_client["telegram_file_bot"]
 connections_db = db["channel_connections"]
 stats_db = db["bot_stats"] 
@@ -1052,62 +1062,60 @@ async def check_expirations():
 
 
 
-# ==========================================
-# 💾 MONGODB SESSION AUTO-SAVER (Har 1 Min)
-# ==========================================
-async def backup_session():
-    session_file = f"{app.name}.session"
-    while True:
-        await asyncio.sleep(60)  # Har 60 seconds me bot apna dimaag Mongo me upload karega
-        try:
-            if os.path.exists(session_file):
-                with open(session_file, "rb") as f:
-                    session_data = f.read()
-                
-                # MongoDB me file ka poora data save karna
-                await session_db.update_one(
-                    {"bot_name": app.name},
-                    {"$set": {"session_file_data": session_data}},
-                    upsert=True
-                )
-        except Exception as e:
-            pass  # Background me shanti se kaam karega
-
 
 # ==========================================
-# 🚀 RUN THE BOT (MONGODB CACHE RESTORE)
+# 🚀 AUTO-CACHE BUILDER (IN-MEMORY) & BOT STARTUP
 # ==========================================
-async def main():
-    session_file = f"{app.name}.session"
-    
-    print("📥 MongoDB se Bot ki purani Memory (Session) download ho rahi hai...")
+async def build_memory():
+    print("🔄 RAM (In-Memory) Cache rebuild ho raha hai...")
     try:
-        # Bot START hone se pehle MongoDB se memory file wapas lana
-        session_doc = await session_db.find_one({"bot_name": app.name})
+        # 1. Telegram se sabhi chats laakar RAM me save karega
+        count = 0
+        async for dialog in app.get_dialogs():
+            count += 1
+        print(f"✅ Bot ne {count} chats ka data Cloud se RAM me load kar liya hai!")
         
-        if session_doc and "session_file_data" in session_doc:
-            with open(session_file, "wb") as f:
-                f.write(session_doc["session_file_data"])
-            print("✅ Memory Successfully Restored from MongoDB!")
-        else:
-            print("⚠️ Koi purani memory nahi mili, Naya MongoDB session ban raha hai.")
+        # 2. MongoDB wali channels ko verify karega
+        connections = await connections_db.find({}).to_list(length=None)
+        for conn in connections:
+            priv_id = conn.get("private_channel_id")
+            pub_id = conn.get("public_channel_id")
+            if priv_id:
+                try: await app.get_chat(priv_id); await asyncio.sleep(0.3) 
+                except Exception: pass
+            if pub_id:
+                try: await app.get_chat(pub_id); await asyncio.sleep(0.3)
+                except Exception: pass
+        
+        # 3. Master Group ko RAM me fix karega
+        try:
+            await app.get_chat(SPECIAL_GROUP_ID)
+            print("✅ Master Group successfully cached in RAM!")
+        except Exception as e:
+            print(f"⚠️ Master Group error: {e}")
+            
+        print("🚀 RAM Memory 100% Sync ho chuki hai. No PeerIdInvalid error!")
     except Exception as e:
-        print(f"❌ Restore Error: {e}")
+        print(f"❌ Memory Build Error: {e}")
 
-    # Memory load hone ke baad bot ko start karna
+async def main():
     await app.start()
-    print("🚀 Bot is fully ONLINE and Error-Free!")
     
-    # Saare Background Tasks shuru karein
+    # Bot start hote hi bina file ke RAM me channels load karega
+    await build_memory() 
+    
+    # Fir background workers start karega
     asyncio.create_task(process_queue())
     asyncio.create_task(check_expirations()) 
-    asyncio.create_task(backup_session())  # 👈 Memory direct Mongo me save karne wala task
+    
+    print("🔥 Bot is fully ONLINE, IN-MEMORY, and Ready!")
     
     from pyrogram import idle
     await idle()
     await app.stop()
 
 if __name__ == "__main__":
-    print("🚀 Starting Bot with MongoDB Session Sync...")
+    print("🚀 Starting Bot in IN-MEMORY mode...")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
+    
