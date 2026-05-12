@@ -297,9 +297,85 @@ async def handle_main_menu_callbacks(client, callback_query):
             pass
             
 
-    # ⏳ Daily Access Input Button
-    elif data == "cmd_dailyaccess":
-        WAITING_FOR_LIMIT[user_id] = True # Status ON kar diya user ke liye
+        # ⏳ 1. Daily Access Dashboard Logic (With NEXT/PREV Pagination)
+    elif data.startswith("cmd_dailyaccess"):
+        await callback_query.answer()
+        
+        # Page number nikalna
+        page = int(data.split("_")[2]) if len(data.split("_")) > 2 else 1
+        limit_per_page = 2 # Ek page me sirf 2 channels dikhayenge taaki clean lage
+        
+        connections = await connections_db.find({"user_id": user_id}).to_list(length=None)
+        if not connections:
+            return await callback_query.message.edit_text("❌ <b>No channels connected yet.</b>", parse_mode=ParseMode.HTML)
+
+        # Pagination Math
+        total_pages = math.ceil(len(connections) / limit_per_page)
+        start_idx = (page - 1) * limit_per_page
+        end_idx = start_idx + limit_per_page
+        current_connections = connections[start_idx:end_idx]
+
+        today_date = datetime.utcnow().strftime("%Y-%m-%d")
+        yesterday_date = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        text = f"📊 <b><u>Daily Access Report (Page {page}/{total_pages}):</u></b>\n\n"
+
+        has_data = False
+        for conn in current_connections:
+            c_name = conn.get("channel_name", "Unknown Channel")
+            c_id = conn.get("private_channel_id")
+            
+            # Har channel ke Top 10 viewers nikalenge
+            viewers = await viewer_stats_db.find({"owner_id": user_id, "channel_name": c_name}).sort("view_count", -1).to_list(length=10)
+            
+            if viewers:
+                has_data = True
+                text += f"📢 <b>Channel:</b> <code>{c_name}</code>\n"
+                for idx, v in enumerate(viewers, 1):
+                    v_id = v.get("viewer_id")
+                    v_name = v.get("viewer_name", "Unknown")
+                    total_views = v.get("view_count", 0)
+                    
+                    # Aaj (Today) ka data
+                    today_data = await daily_access_db.find_one({"viewer_id": v_id, "channel_id": c_id, "date": today_date})
+                    today_count = today_data.get("count", 0) if today_data else 0
+                    
+                    # Kal (Yesterday) ka data
+                    yesterday_data = await daily_access_db.find_one({"viewer_id": v_id, "channel_id": c_id, "date": yesterday_date})
+                    yesterday_count = yesterday_data.get("count", 0) if yesterday_data else 0
+                    
+                    text += f"   ├ <b>{idx}. {v_name}</b>\n"
+                    text += f"   │  └ 📈 Today: <b>{today_count}</b> | 📉 Y'day: <b>{yesterday_count}</b> | 📊 Total: <b>{total_views}</b>\n"
+                text += "━━━━━━━━━━━━━━━━━━━━\n"
+
+        if not has_data:
+            text += "<i>No views recorded in these channels yet.</i>\n\n"
+
+        text += "⚙️ <i>To change the daily video limit, click the button below.</i>"
+
+        # 🔘 NEXT & PREV Buttons Generate karna
+        nav_buttons = []
+        if page > 1:
+            nav_buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"cmd_dailyaccess_{page-1}"))
+        if page < total_pages:
+            nav_buttons.append(InlineKeyboardButton("Next ➡️", callback_data=f"cmd_dailyaccess_{page+1}"))
+            
+        # Keyboard setup (Navigation upar, Set limit niche)
+        keyboard_buttons = []
+        if nav_buttons:
+            keyboard_buttons.append(nav_buttons)
+        keyboard_buttons.append([InlineKeyboardButton("⚙️ Set Global Limit", callback_data="cmd_setlimit")])
+        
+        keyboard = InlineKeyboardMarkup(keyboard_buttons)
+
+        try:
+            await callback_query.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            pass
+
+    # ⚙️ 2. Set Limit Button Logic
+    elif data == "cmd_setlimit":
+        WAITING_FOR_LIMIT[user_id] = True 
         await callback_query.message.reply_text(
             "📝 <b><u>Set Global Daily Access Limit</u></b>\n\n"
             "Please send the number of videos a user can watch per day (e.g., <code>5</code>).\n\n"
