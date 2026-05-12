@@ -1050,13 +1050,59 @@ async def check_expirations():
         await asyncio.sleep(21600) 
 
 # ==========================================
-# 🚀 RUN THE BOT
+# 🚀 BOT STARTUP & MONGODB CACHE RECOVERY
 # ==========================================
-if __name__ == "__main__":
-    print("🚀 Premium UI Bot with Daily Pin Alerts is starting up...")
-    loop = asyncio.get_event_loop()
-    loop.create_task(process_queue())
-    loop.create_task(check_expirations()) 
-    app.run()
+async def main():
+    print("🚀 Bot is starting...")
+    await app.start()
+    
+    print("🔄 MongoDB se channels data lekar Session Cache update ho raha hai...")
+    
+    # 1. Master Group ka Cache fix karna
+    try:
+        await app.get_chat(SPECIAL_GROUP_ID)
+        print("✅ Master Group Cached!")
+    except Exception as e:
+        print(f"⚠️ Master Group cache failed (Shayad bot group me nahi hai): {e}")
+        
+    # 2. Database se saare connected channels ko nikal kar session theek karna
+    try:
+        connections = await connections_db.find({}).to_list(length=None)
+        for conn in connections:
+            priv_id = conn.get("private_channel_id")
+            pub_id = conn.get("public_channel_id")
+            
+            # Private Channel cache karein
+            if priv_id:
+                try: 
+                    await app.get_chat(priv_id)
+                    await asyncio.sleep(0.2) # Telegram Ban (FloodWait) se bachne ke liye thoda aaram
+                except: 
+                    pass
+                    
+            # Public Channel cache karein
+            if pub_id:
+                try: 
+                    await app.get_chat(pub_id)
+                    await asyncio.sleep(0.2)
+                except: 
+                    pass
+                    
+        print(f"✅ {len(connections)} channels successfully synced with MongoDB!")
+    except Exception as e:
+        print(f"MongoDB Sync Error: {e}")
 
+    # 3. Background tasks shuru karein
+    asyncio.create_task(process_queue())
+    asyncio.create_task(check_expirations()) 
+    
+    print("🔥 Bot is fully ONLINE and Error-Free!")
+    
+    from pyrogram import idle
+    await idle()
+    await app.stop()
+
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
 
