@@ -786,84 +786,74 @@ async def disconnect_channels(client, message):
 
 
 # ==========================================
-# 📢 BROADCAST TO PRIVATE CHANNELS COMMAND
+# 📢 BROADCAST COMMAND (Cache Fix & Auto-Forward ke liye)
 # ==========================================
 @app.on_message(filters.command("broadcast") & filters.private)
 async def broadcast_to_private_channels(client, message):
     user_id = message.from_user.id
     
-    # 1. Verify Sudo Access
     if not await is_sudo(user_id):
         return await message.reply_text("❌ <b>Access Denied!</b> Active subscription required.", parse_mode=ParseMode.HTML)
 
-    # 2. Check if there is a message to broadcast (supports replies and text)
     reply_msg = message.reply_to_message
     command_text = message.text.split(None, 1)
 
     if not reply_msg and len(command_text) < 2:
         return await message.reply_text(
-            "❌ <b>Format Error!</b>\n\n"
-            "Please use the command like this:\n"
-            "👉 <code>/broadcast Your message here</code>\n\n"
-            "Or reply to any message/media with <code>/broadcast</code>.", 
+            "❌ <b>Format Error!</b>\n👉 <code>/broadcast Your message</code>\nYa kisi message ka reply karein.", 
             parse_mode=ParseMode.HTML
         )
 
-    # 3. Let the user know the process has started
-    status_msg = await message.reply_text("⏳ <b>Fetching your connected private channels...</b>", parse_mode=ParseMode.HTML)
+    status_msg = await message.reply_text("⏳ <b>Fetching your connected channels...</b>", parse_mode=ParseMode.HTML)
 
-    # 4. Find all private channels connected by this specific user
     user_connections = await connections_db.find({"user_id": user_id}).to_list(length=None)
     
     if not user_connections:
-        return await status_msg.edit_text("❌ <b>No channels found!</b> You haven't connected any private channels yet.", parse_mode=ParseMode.HTML)
+        return await status_msg.edit_text("❌ <b>No channels found!</b>", parse_mode=ParseMode.HTML)
 
-    await status_msg.edit_text(f"🚀 <b>Broadcasting to {len(user_connections)} channels...</b>\n<i>Please wait...</i>", parse_mode=ParseMode.HTML)
+    await status_msg.edit_text(f"🚀 <b>Broadcasting to {len(user_connections)} Private Channels...</b>\n<i>Uske baad bot inhe apne aap Public me bhejega!</i>", parse_mode=ParseMode.HTML)
 
     successful = 0
     failed = 0
 
-    # 5. Loop through channels and safely send the message
     for conn in user_connections:
         target_chat_id = conn.get("private_channel_id")
         if not target_chat_id:
             continue
 
         try:
+            # 🛑 WAKE-UP TRICK: Force Cache Update taaki error na aaye
+            try:
+                await client.get_chat(target_chat_id)
+            except:
+                pass
+
+            # Sirf Private me bhejenge, baaki kaam Auto-Forward (Catcher) khud kar lega!
             if reply_msg:
-                # If they replied to a message, copy it (this supports media, buttons, etc.)
                 await reply_msg.copy(target_chat_id)
             else:
-                # If they just typed text, send the text
                 text_to_send = command_text[1]
-                await app.send_message(target_chat_id, text_to_send, parse_mode=ParseMode.HTML)
+                await client.send_message(target_chat_id, text_to_send, parse_mode=ParseMode.HTML)
             
             successful += 1
-            await asyncio.sleep(1.5) # Sleep to avoid Telegram's spam filters (FloodWait)
+            await asyncio.sleep(1.5) 
             
         except FloodWait as e:
-            # If we send too fast, wait the required time and try again
             await asyncio.sleep(e.value)
-            try:
-                if reply_msg:
-                    await reply_msg.copy(target_chat_id)
-                else:
-                    await app.send_message(target_chat_id, command_text[1], parse_mode=ParseMode.HTML)
-                successful += 1
-            except:
-                failed += 1
+            failed += 1
         except Exception as e:
-            print(f"Broadcast failed for channel {target_chat_id}: {e}")
+            print(f"Broadcast failed for {target_chat_id}: {e}")
             failed += 1
 
-    # 6. Final Report to the user
     report = (
         "✅ <b>Broadcast Completed!</b>\n\n"
         f"📢 <b>Target Channels:</b> {len(user_connections)}\n"
-        f"✅ <b>Successfully Sent:</b> {successful}\n"
-        f"❌ <b>Failed:</b> {failed}"
+        f"✅ <b>Successfully Sent to Private:</b> {successful}\n"
+        f"❌ <b>Failed:</b> {failed}\n\n"
+        "<i>(Bot ab automatically in messages ko Public channel aur Master group me process kar raha hai...)</i>"
     )
     await status_msg.edit_text(report, parse_mode=ParseMode.HTML)
+
 
 
 
