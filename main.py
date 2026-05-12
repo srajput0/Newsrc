@@ -1,4 +1,4 @@
-
+import os  #
 import math
 from pyrogram.enums import ParseMode, ChatMemberStatus
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
@@ -42,6 +42,7 @@ viewer_stats_db = db["viewer_stats"]
 users_db = db["all_users"] 
 links_db = db["short_links"] 
 sudo_db = db["sudo_users"] 
+session_db = db["bot_session"]
 daily_access_db = db["daily_access_tracker"]
 WAITING_FOR_LIMIT = {}  # Daily access limit input track karne ke liye
 PENDING_SOURCES = {}    # Auto channel connect status track karne ke liye
@@ -1049,34 +1050,64 @@ async def check_expirations():
         # Loop ko har 6 ghante me ek baar chalayenge (lekin message sirf 23 hours baad hi jayega if condition ki wajah se)
         await asyncio.sleep(21600) 
 
+
+
 # ==========================================
-# 🚀 RUN THE BOT (WITH AUTO-CACHE BUILDER)
+# 💾 MONGODB SESSION AUTO-SAVER (Har 1 Min)
+# ==========================================
+async def backup_session():
+    session_file = f"{app.name}.session"
+    while True:
+        await asyncio.sleep(60)  # Har 60 seconds me bot apna dimaag Mongo me upload karega
+        try:
+            if os.path.exists(session_file):
+                with open(session_file, "rb") as f:
+                    session_data = f.read()
+                
+                # MongoDB me file ka poora data save karna
+                await session_db.update_one(
+                    {"bot_name": app.name},
+                    {"$set": {"session_file_data": session_data}},
+                    upsert=True
+                )
+        except Exception as e:
+            pass  # Background me shanti se kaam karega
+
+
+# ==========================================
+# 🚀 RUN THE BOT (MONGODB CACHE RESTORE)
 # ==========================================
 async def main():
-    await app.start()
-    print("🚀 Bot is starting and rebuilding memory...")
+    session_file = f"{app.name}.session"
     
-    # 🪄 JADOO: Bot apne aap Telegram se un sabhi channels/groups ka data fetch kar lega jisme wo admin/member hai
+    print("📥 MongoDB se Bot ki purani Memory (Session) download ho rahi hai...")
     try:
-        count = 0
-        async for dialog in app.get_dialogs():
-            count += 1
-        print(f"✅ Cache Successfully Rebuilt! Bot ne {count} chats memory me load kar liye hain.")
-    except Exception as e:
-        print(f"⚠️ Cache rebuild error: {e}")
+        # Bot START hone se pehle MongoDB se memory file wapas lana
+        session_doc = await session_db.find_one({"bot_name": app.name})
         
-    # Background tasks shuru karein
+        if session_doc and "session_file_data" in session_doc:
+            with open(session_file, "wb") as f:
+                f.write(session_doc["session_file_data"])
+            print("✅ Memory Successfully Restored from MongoDB!")
+        else:
+            print("⚠️ Koi purani memory nahi mili, Naya MongoDB session ban raha hai.")
+    except Exception as e:
+        print(f"❌ Restore Error: {e}")
+
+    # Memory load hone ke baad bot ko start karna
+    await app.start()
+    print("🚀 Bot is fully ONLINE and Error-Free!")
+    
+    # Saare Background Tasks shuru karein
     asyncio.create_task(process_queue())
     asyncio.create_task(check_expirations()) 
-    
-    print("🔥 Bot is fully ONLINE and Ready! Ab PeerIdInvalid error nahi aayega.")
+    asyncio.create_task(backup_session())  # 👈 Memory direct Mongo me save karne wala task
     
     from pyrogram import idle
     await idle()
     await app.stop()
 
 if __name__ == "__main__":
-    print("🚀 Starting Bot...")
+    print("🚀 Starting Bot with MongoDB Session Sync...")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
-    
