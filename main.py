@@ -1,4 +1,4 @@
-import os  #
+
 import math
 from pyrogram.enums import ParseMode, ChatMemberStatus
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
@@ -31,20 +31,10 @@ ADMIN_ID = 5050578106  # 👈 Apni Telegram ID daalein
 # ==========================================
 # INITIALIZATION
 # ==========================================
-app = Client(
-    "srcbghssbsr_bot1", 
-    api_id=API_ID, 
-    api_hash=API_HASH, 
-    bot_token=BOT_TOKEN,
-    in_memory=True  # 👈 MAGIC KEYWORD: Isse file banna humesha ke liye band ho jayega! Sab RAM me chalega.
-)
+app = Client("srcbghssbslser_bot1", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
+#db_client = AsyncIOMotorClient(MONGO_URI)
 db_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000, connectTimeoutMS=20000, maxIdleTimeMS=50000)
-# Baaki sab database connection waise hi rahenge...
-
-
-
-#db_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000, connectTimeoutMS=20000, maxIdleTimeMS=50000)
 db = db_client["telegram_file_bot"]
 connections_db = db["channel_connections"]
 stats_db = db["bot_stats"] 
@@ -52,7 +42,6 @@ viewer_stats_db = db["viewer_stats"]
 users_db = db["all_users"] 
 links_db = db["short_links"] 
 sudo_db = db["sudo_users"] 
-session_db = db["bot_session"]
 daily_access_db = db["daily_access_tracker"]
 WAITING_FOR_LIMIT = {}  # Daily access limit input track karne ke liye
 PENDING_SOURCES = {}    # Auto channel connect status track karne ke liye
@@ -1060,62 +1049,34 @@ async def check_expirations():
         # Loop ko har 6 ghante me ek baar chalayenge (lekin message sirf 23 hours baad hi jayega if condition ki wajah se)
         await asyncio.sleep(21600) 
 
-
-
-
 # ==========================================
-# 🚀 AUTO-CACHE BUILDER (IN-MEMORY) & BOT STARTUP
+# 🚀 RUN THE BOT (WITH AUTO-CACHE BUILDER)
 # ==========================================
-async def build_memory():
-    print("🔄 RAM (In-Memory) Cache rebuild ho raha hai...")
+async def main():
+    await app.start()
+    print("🚀 Bot is starting and rebuilding memory...")
+    
+    # 🪄 JADOO: Bot apne aap Telegram se un sabhi channels/groups ka data fetch kar lega jisme wo admin/member hai
     try:
-        # 1. Telegram se sabhi chats laakar RAM me save karega
         count = 0
         async for dialog in app.get_dialogs():
             count += 1
-        print(f"✅ Bot ne {count} chats ka data Cloud se RAM me load kar liya hai!")
-        
-        # 2. MongoDB wali channels ko verify karega
-        connections = await connections_db.find({}).to_list(length=None)
-        for conn in connections:
-            priv_id = conn.get("private_channel_id")
-            pub_id = conn.get("public_channel_id")
-            if priv_id:
-                try: await app.get_chat(priv_id); await asyncio.sleep(0.3) 
-                except Exception: pass
-            if pub_id:
-                try: await app.get_chat(pub_id); await asyncio.sleep(0.3)
-                except Exception: pass
-        
-        # 3. Master Group ko RAM me fix karega
-        try:
-            await app.get_chat(SPECIAL_GROUP_ID)
-            print("✅ Master Group successfully cached in RAM!")
-        except Exception as e:
-            print(f"⚠️ Master Group error: {e}")
-            
-        print("🚀 RAM Memory 100% Sync ho chuki hai. No PeerIdInvalid error!")
+        print(f"✅ Cache Successfully Rebuilt! Bot ne {count} chats memory me load kar liye hain.")
     except Exception as e:
-        print(f"❌ Memory Build Error: {e}")
-
-async def main():
-    await app.start()
-    
-    # Bot start hote hi bina file ke RAM me channels load karega
-    await build_memory() 
-    
-    # Fir background workers start karega
+        print(f"⚠️ Cache rebuild error: {e}")
+        
+    # Background tasks shuru karein
     asyncio.create_task(process_queue())
     asyncio.create_task(check_expirations()) 
     
-    print("🔥 Bot is fully ONLINE, IN-MEMORY, and Ready!")
+    print("🔥 Bot is fully ONLINE and Ready! Ab PeerIdInvalid error nahi aayega.")
     
     from pyrogram import idle
     await idle()
     await app.stop()
 
 if __name__ == "__main__":
-    print("🚀 Starting Bot in IN-MEMORY mode...")
+    print("🚀 Starting Bot...")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
     
