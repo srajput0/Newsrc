@@ -1050,59 +1050,33 @@ async def check_expirations():
         await asyncio.sleep(21600) 
 
 # ==========================================
-# 🚀 BOT STARTUP & MONGODB CACHE RECOVERY
+# 🚀 RUN THE BOT (WITH AUTO-CACHE BUILDER)
 # ==========================================
 async def main():
-    print("🚀 Bot is starting...")
     await app.start()
+    print("🚀 Bot is starting and rebuilding memory...")
     
-    print("🔄 MongoDB se channels data lekar Session Cache update ho raha hai...")
-    
-    # 1. Master Group ka Cache fix karna
+    # 🪄 JADOO: Bot apne aap Telegram se un sabhi channels/groups ka data fetch kar lega jisme wo admin/member hai
     try:
-        await app.get_chat(SPECIAL_GROUP_ID)
-        print("✅ Master Group Cached!")
+        count = 0
+        async for dialog in app.get_dialogs():
+            count += 1
+        print(f"✅ Cache Successfully Rebuilt! Bot ne {count} chats memory me load kar liye hain.")
     except Exception as e:
-        print(f"⚠️ Master Group cache failed (Shayad bot group me nahi hai): {e}")
+        print(f"⚠️ Cache rebuild error: {e}")
         
-    # 2. Database se saare connected channels ko nikal kar session theek karna
-    try:
-        connections = await connections_db.find({}).to_list(length=None)
-        for conn in connections:
-            priv_id = conn.get("private_channel_id")
-            pub_id = conn.get("public_channel_id")
-            
-            # Private Channel cache karein
-            if priv_id:
-                try: 
-                    await app.get_chat(priv_id)
-                    await asyncio.sleep(0.2) # Telegram Ban (FloodWait) se bachne ke liye thoda aaram
-                except: 
-                    pass
-                    
-            # Public Channel cache karein
-            if pub_id:
-                try: 
-                    await app.get_chat(pub_id)
-                    await asyncio.sleep(0.2)
-                except: 
-                    pass
-                    
-        print(f"✅ {len(connections)} channels successfully synced with MongoDB!")
-    except Exception as e:
-        print(f"MongoDB Sync Error: {e}")
-
-    # 3. Background tasks shuru karein
+    # Background tasks shuru karein
     asyncio.create_task(process_queue())
     asyncio.create_task(check_expirations()) 
     
-    print("🔥 Bot is fully ONLINE and Error-Free!")
+    print("🔥 Bot is fully ONLINE and Ready! Ab PeerIdInvalid error nahi aayega.")
     
     from pyrogram import idle
     await idle()
     await app.stop()
 
 if __name__ == "__main__":
+    print("🚀 Starting Bot...")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
-
+    
