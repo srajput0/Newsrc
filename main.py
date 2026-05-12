@@ -21,7 +21,7 @@ from pyrogram.errors import FloodWait, PeerIdInvalid
 # ==========================================
 API_ID = 20137104
 API_HASH = "1209338eedc55ab701dd2e9d353c05ad"
-BOT_TOKEN = "8698945941:AAGyFS8zEeNjOCP9z34HMN9bsRujHO4kxhg"
+BOT_TOKEN = "8797515244:AAEP7za-JSFuqLuSV1IHtE1lXFn2nmwVLeY"
 
 MONGO_URI = "mongodb+srv://tigerbundle282:tTaRXh353IOL9mj2@testcookies.2elxf.mongodb.net/?retryWrites=true&w=majority&appName=Testcookies"
 SPECIAL_GROUP_ID = -1003667939361
@@ -31,7 +31,7 @@ ADMIN_ID = 5050578106  # 👈 Apni Telegram ID daalein
 # ==========================================
 # INITIALIZATION
 # ==========================================
-app = Client("srcjabghssbslser_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client("srcjabghssbslser_bot1", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 #db_client = AsyncIOMotorClient(MONGO_URI)
 db_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000, connectTimeoutMS=20000, maxIdleTimeMS=50000)
